@@ -1,4 +1,4 @@
-# LWable AI LWC Playground
+# LWable
 
 LWable lets you describe a Lightning Web Component in natural language and preview usable source code in seconds. The project couples a Lightning Web Runtime (LWR) single-page app with a lightweight Node/Express API that proxies calls to OpenAI.
 
