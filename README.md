@@ -44,3 +44,8 @@ Once both processes are up, open http://localhost:3000. Enter a prompt in the ch
 - Missing API key? The API server will exit with "401 Unauthorized" style errors; double-check `.env` and restart.
 - Model errors from OpenAI appear in the API console; inspect the stack trace there first.
 - Port clashes on 3000 or 3001? Stop the conflicting service or update the scripts in `package.json` to use open ports.
+
+## Roadmap
+- Chat UI to look more like Chatting.
+- Download LWC Option.
+- Deploy component to Salesforce Org.
