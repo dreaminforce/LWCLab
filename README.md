@@ -2,6 +2,9 @@
 
 LWable lets you describe a Lightning Web Component in natural language and preview usable source code in seconds. The project couples a Lightning Web Runtime (LWR) single-page app with a lightweight Node/Express API that proxies calls to OpenAI.
 
+[LWable.webm](https://github.com/user-attachments/assets/d8c50ebc-9ecd-4fde-995f-9f37bd6b16ec)
+
+
 ## What Happens After You Clone
 - `src/modules/app/shell` renders the chat-style UI you will use to describe the component you want.
 - `api/server.mjs` runs on port 3001 and talks to OpenAI to generate HTML/JS/CSS for the preview.
@@ -9,7 +12,7 @@ LWable lets you describe a Lightning Web Component in natural language and previ
 
 ## Prerequisites
 - Node.js 18 or newer (the project is pinned to Node 20.16.0 via Volta).
-- Yarn (recommended) or npm for dependency management.
+- npm for dependency management.
 - An OpenAI API key with access to the `gpt-4o-mini` model.
 
 ## Initial Setup
@@ -34,9 +37,8 @@ LWable lets you describe a Lightning Web Component in natural language and previ
 Once both processes are up, open http://localhost:3000. Enter a prompt in the chat panel, click **Generate**, and the preview pane will refresh with the latest component. The last conversation and code snapshot are cached in `sessionStorage` so a browser refresh keeps your progress.
 
 ## Daily Workflow Tips
-- Every time you generate, the files in `src/modules/gen/preview` are overwritten. Commit or copy them elsewhere when you want to preserve a version.
+- Every time you generate, the files in `src/modules/gen/preview` are overwritten. I've added them to gitIgnore so that they don't bug you on every refresh.
 - The API sanitises generated markup to enforce valid LWC semantics; check the terminal logs if a prompt fails.
-- If you see "Waiting for AI component..." after a reload, run the generator again or restart `yarn api` to reset the stub output.
 
 ## Troubleshooting
 - Missing API key? The API server will exit with "401 Unauthorized" style errors; double-check `.env` and restart.
