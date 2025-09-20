@@ -17,21 +17,35 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const GEN_DIR = path.resolve(process.cwd(), 'src/modules/gen/preview');
 
 // ---- helpers ----
-function sanitizeHtml(html) {
+function sanitizeHtml(html, info = {}) {
   let s = String(html ?? '');
 
   // strip script tags
   s = s.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '');
 
+  const mergeClassAttributes = (staticPart, dynamicPart) => {
+    info.mergeClasses = true;
+    const cleanedStatic = String(staticPart || '').replace(/\s+/g, ' ').trim();
+    const escapedStatic = cleanedStatic.replace(/"/g, '\"');
+    const expression = String(dynamicPart || '').trim();
+    return `class={mergeClasses("${escapedStatic}", ${expression})}`;
+  };
+
+  const staticThenDynamic = /class="([^"]+)"\s+class={(.+?)}(\s|>)/g;
+  const dynamicThenStatic = /class={(.+?)}\s+class="([^"]+)"(\s|>)/g;
+
+  s = s.replace(staticThenDynamic, (_, staticPart, dynamicPart, tail) => `${mergeClassAttributes(staticPart, dynamicPart)}${tail}`);
+  s = s.replace(dynamicThenStatic, (_, dynamicPart, staticPart, tail) => `${mergeClassAttributes(staticPart, dynamicPart)}${tail}`);
+
   // convert framework-y event attrs to LWC (e.g., @click / (click))
   s = s.replace(/@\s*([a-z]+)\s*=\s*"([A-Za-z_]\w*)\s*(?:\(\s*\))?\s*"/g, 'on$1={$2}');
   s = s.replace(/\(\s*([a-z]+)\s*\)\s*=\s*"([A-Za-z_]\w*)\s*(?:\(\s*\))?\s*"/g, 'on$1={$2}');
 
-  // convert inline handlers onclick="handle()" or onclick="handle" → onclick={handle}
+  // convert inline handlers onclick="handle()" or onclick="handle" -> onclick={handle}
   s = s.replace(/on([a-z]+)\s*=\s*"\s*([A-Za-z_]\w*)\s*\(\s*\)\s*"/g, 'on$1={$2}');
   s = s.replace(/on([a-z]+)\s*=\s*"\s*([A-Za-z_]\w*)\s*"/g, 'on$1={$2}');
 
-  // normalize onclick={this.handle} → onclick={handle}
+  // normalize onclick={this.handle} -> onclick={handle}
   s = s.replace(/on([a-z]+)\s*=\s*{\s*this\.([A-Za-z_]\w*)\s*}/g, 'on$1={$2}');
 
   // final guard: no quoted inline handlers remain
@@ -39,7 +53,67 @@ function sanitizeHtml(html) {
     throw new Error('Inline event handlers must use LWC syntax, e.g. onclick={handleClick}.');
   }
 
+  const attrTagRe = /<([a-zA-Z](?:[\w:-]*))([^<]*?)>/g;
+  let tagMatch;
+  while ((tagMatch = attrTagRe.exec(s)) !== null) {
+    const attrChunk = tagMatch[2];
+    if (!attrChunk) {
+      continue;
+    }
+    const seen = new Set();
+    const attrRe = /(\w[\w:-]*)(?=\s*=)/g;
+    let attrMatch;
+    while ((attrMatch = attrRe.exec(attrChunk)) !== null) {
+      const name = attrMatch[1];
+      if (seen.has(name)) {
+        throw new Error(`Duplicate attribute "${name}" detected in HTML.`);
+      }
+      seen.add(name);
+    }
+  }
+
   return s.trim();
+}
+
+function ensureMergeClasses(js) {
+  if (/\bmergeClasses\s*\(/.test(js)) {
+    return js;
+  }
+
+  const classHeaderRe = /(export\s+default\s+class\s+Preview\s+extends\s+LightningElement\s*{)/;
+  if (!classHeaderRe.test(js)) {
+    return js;
+  }
+
+  const helperBody = `
+  mergeClasses(...parts) {
+    return parts
+      .flat(Infinity)
+      .map((value) => (typeof value === 'string' ? value.trim() : ''))
+      .filter(Boolean)
+      .join(' ')
+      .replace(/\s+/g, ' ');
+  }
+`;
+
+  return js.replace(classHeaderRe, `$1${helperBody}`);
+}
+
+function normalizeConversation(history) {
+  if (!Array.isArray(history)) {
+    return [];
+  }
+
+  return history
+    .map((entry) => {
+      const role = entry?.role === 'assistant' ? 'assistant' : 'user';
+      const content = (entry?.content ?? entry?.text ?? '').toString().trim();
+      if (!content) {
+        return null;
+      }
+      return { role, content: content.slice(0, 8000) };
+    })
+    .filter(Boolean);
 }
 
 function ensureHandlerStubs(js, handlerNames) {
@@ -108,7 +182,7 @@ Return the **full** files (html/js/css), not a diff.
 // ---- routes ----
 app.post('/api/generate', async (req, res) => {
   try {
-    const { prompt, base } = req.body || {};
+    const { prompt, base, conversation } = req.body || {};
     if (!prompt || !prompt.trim()) {
       return res.status(400).json({ error: 'Missing prompt' });
     }
@@ -138,13 +212,17 @@ ${prompt}
 
 Return ONLY JSON with keys "html","js","css" (no backticks).`;
 
+    const historyMessages = normalizeConversation(conversation);
+    const openAiMessages = [
+      { role: 'system', content: SYSTEM },
+      ...historyMessages,
+      { role: 'user', content: userText },
+    ];
+
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: SYSTEM },
-        { role: 'user', content: userText },
-      ],
+      messages: openAiMessages,
       temperature: 0.2,
     });
 
@@ -152,9 +230,14 @@ Return ONLY JSON with keys "html","js","css" (no backticks).`;
     const parsed = JSON.parse(content);
 
     // sanitize + validate
-    const html = sanitizeHtml(parsed.html);
+    const sanitizeInfo = {};
+    const html = sanitizeHtml(parsed.html, sanitizeInfo);
     let js = String(parsed.js ?? '');
     const css = String(parsed.css ?? '');
+
+    if (sanitizeInfo.mergeClasses) {
+      js = ensureMergeClasses(js);
+    }
 
     if (!html.includes('<template')) {
       return res.status(422).json({ error: 'HTML must contain <template>…</template>' });
@@ -166,6 +249,9 @@ Return ONLY JSON with keys "html","js","css" (no backticks).`;
     // ensure handlers referenced in HTML exist in JS
     const handlerNames = Array.from(html.matchAll(/on[a-z]+\s*=\s*{\s*([A-Za-z_]\w*)\s*}/g)).map(m => m[1]);
     js = ensureHandlerStubs(js, handlerNames);
+    if (sanitizeInfo.mergeClasses) {
+      js = ensureMergeClasses(js);
+    }
 
     // write files
     await writePreviewFiles({ html, js, css });

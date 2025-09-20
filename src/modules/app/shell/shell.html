@@ -9,8 +9,28 @@
         <template if:true={hasMessages}>
           <template for:each={messages} for:item="message">
             <article key={message.id} class="chat__message" data-role={message.role}>
-              <span class="chat__meta">{message.label}</span>
-              <p class="chat__text">{message.text}</p>
+              <div class="chat__avatar" data-role={message.role}>
+                <template if:true={message.isUser}>
+                  <svg class="chat__avatar-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <circle cx="12" cy="7.5" r="4"></circle>
+                    <path d="M4 20c0-3.7 3.1-6.5 7-6.5h2c3.9 0 7 2.8 7 6.5v1H4z"></path>
+                  </svg>
+                </template>
+                <template if:false={message.isUser}>
+                  <svg class="chat__avatar-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <rect x="4" y="6" width="16" height="12" rx="3"></rect>
+                    <rect x="7" y="9" width="3" height="3" rx="1"></rect>
+                    <rect x="14" y="9" width="3" height="3" rx="1"></rect>
+                    <path d="M9 15h6" stroke-width="1.6" stroke-linecap="round" stroke="currentColor" fill="none"></path>
+                    <path d="M9 4h6l1 2H8z"></path>
+                  </svg>
+                </template>
+                <span class="visually-hidden">{message.avatarLabel}</span>
+              </div>
+              <div class="chat__bubble">
+                <span class="chat__meta">{message.label}</span>
+                <p class="chat__text">{message.text}</p>
+              </div>
             </article>
           </template>
         </template>
@@ -54,6 +74,14 @@
       </div>
 
       <div class="preview__body">
+        <template if:true={generating}>
+          <div class="preview__progress" role="status" aria-live="polite">
+            <div class="preview__progress-bar">
+              <div class="preview__progress-fill"></div>
+            </div>
+            <span class="preview__progress-text">Generating component...</span>
+          </div>
+        </template>
         <template if:true={isPreview}>
           <template if:true={hasGenerated}>
             <gen-preview></gen-preview>
@@ -69,15 +97,60 @@
           <template if:true={hasCode}>
             <div class="code-view">
               <div class="code-view__file">
-                <h3 class="code-view__title">preview.html</h3>
+                <div class="code-view__header">
+                  <h3 class="code-view__title">preview.html</h3>
+                  <button
+                    type="button"
+                    class="code-view__copy"
+                    data-target="html"
+                    onclick={copyCode}
+                    title="Copy preview.html"
+                    aria-label="Copy preview.html to clipboard">
+                    <svg class="code-view__copy-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M9 3h8a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"></path>
+                      <path d="M7 7H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path>
+                    </svg>
+                    <span class="visually-hidden">Copy preview.html</span>
+                  </button>
+                </div>
                 <pre class="code-view__block"><code>{codeHtml}</code></pre>
               </div>
               <div class="code-view__file">
-                <h3 class="code-view__title">preview.js</h3>
+                <div class="code-view__header">
+                  <h3 class="code-view__title">preview.js</h3>
+                  <button
+                    type="button"
+                    class="code-view__copy"
+                    data-target="js"
+                    onclick={copyCode}
+                    title="Copy preview.js"
+                    aria-label="Copy preview.js to clipboard">
+                    <svg class="code-view__copy-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M9 3h8a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"></path>
+                      <path d="M7 7H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path>
+                    </svg>
+                    <span class="visually-hidden">Copy preview.js</span>
+                  </button>
+                </div>
                 <pre class="code-view__block"><code>{codeJs}</code></pre>
               </div>
               <div class="code-view__file">
-                <h3 class="code-view__title">preview.css</h3>
+                <div class="code-view__header">
+                  <h3 class="code-view__title">preview.css</h3>
+                  <button
+                    type="button"
+                    class="code-view__copy"
+                    data-target="css"
+                    onclick={copyCode}
+                    title="Copy preview.css"
+                    aria-label="Copy preview.css to clipboard">
+                    <svg class="code-view__copy-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M9 3h8a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"></path>
+                      <path d="M7 7H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path>
+                    </svg>
+                    <span class="visually-hidden">Copy preview.css</span>
+                  </button>
+                </div>
                 <pre class="code-view__block"><code>{codeCss}</code></pre>
               </div>
             </div>

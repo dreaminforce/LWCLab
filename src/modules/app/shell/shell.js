@@ -33,6 +33,49 @@ export default class Shell extends LightningElement {
   get codeJs() { return this.code?.js || ''; }
   get codeCss() { return this.code?.css || ''; }
 
+  decorateMessage(message) {
+    if (!message || !message.role) {
+      return null;
+    }
+
+    const role = message.role;
+    return {
+      ...message,
+      isUser: role === 'user',
+      avatarLabel: role === 'user' ? 'User avatar' : 'Assistant avatar',
+    };
+  }
+
+  formatConversation(messages) {
+    if (!Array.isArray(messages)) {
+      return [];
+    }
+
+    return messages
+      .map((message) => {
+        const role = message?.role === 'assistant' ? 'assistant' : 'user';
+        const content = (message?.text ?? '').toString().trim();
+        if (!content) {
+          return null;
+        }
+        return { role, content };
+      })
+      .filter(Boolean);
+  }
+
+  getCodeSnippet(part) {
+    switch (part) {
+      case 'html':
+        return this.codeHtml;
+      case 'js':
+        return this.codeJs;
+      case 'css':
+        return this.codeCss;
+      default:
+        return '';
+    }
+  }
+
   connectedCallback() {
     const shouldShowPreview = window.location.hash === '#show';
 
@@ -65,14 +108,23 @@ export default class Shell extends LightningElement {
   }
 
   restoreMessages() {
+    let restored = [];
+
     try {
       const raw = window.sessionStorage.getItem(CHAT_STORAGE_KEY);
       if (raw) {
-        this.messages = JSON.parse(raw);
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          restored = parsed
+            .map((message) => this.decorateMessage(message))
+            .filter(Boolean);
+        }
       }
     } catch {
-      this.messages = [];
+      restored = [];
     }
+
+    this.messages = restored;
   }
 
   persistMessages(nextMessages) {
@@ -99,13 +151,63 @@ export default class Shell extends LightningElement {
     this.tab = event.currentTarget.dataset.tab;
   };
 
+  copyCode = async (event) => {
+    const button = event?.currentTarget;
+    if (!button) {
+      return;
+    }
+
+    const target = button.dataset?.target;
+    const snippet = this.getCodeSnippet(target);
+
+    if (!snippet) {
+      return;
+    }
+
+    let copied = false;
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(snippet);
+        copied = true;
+      }
+    } catch {
+      copied = false;
+    }
+
+    if (!copied) {
+      const textarea = document.createElement('textarea');
+      textarea.value = snippet;
+      textarea.setAttribute('readonly', '');
+      textarea.style.position = 'fixed';
+      textarea.style.top = '-1000px';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        document.execCommand('copy');
+      } catch {
+        // ignore copy failures
+      }
+      document.body.removeChild(textarea);
+    }
+
+    button.classList.add('code-view__copy--copied');
+    window.clearTimeout(button._copyTimeout);
+    button._copyTimeout = window.setTimeout(() => {
+      button.classList.remove('code-view__copy--copied');
+      button._copyTimeout = null;
+    }, 1500);
+  };
+
   createMessage(role, text) {
-    return {
+    const base = {
       id: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
       role,
       label: role === 'user' ? 'You' : 'Assistant',
       text,
     };
+
+    return this.decorateMessage(base) ?? base;
   }
 
   async generate() {
@@ -124,10 +226,12 @@ export default class Shell extends LightningElement {
     try {
       const base = (this.code.html || this.code.js || this.code.css) ? this.code : null;
 
+      const conversation = this.formatConversation(pendingMessages);
+
       const response = await fetch('http://localhost:3001/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: trimmedPrompt, base }),
+        body: JSON.stringify({ prompt: trimmedPrompt, base, conversation }),
       });
 
       if (!response.ok) {
