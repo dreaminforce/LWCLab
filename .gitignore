@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+
+# LWR caches and build artifacts
+__lwr_cache__/
+dist/
+build/
+coverage/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Editor and OS metadata
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+
+# Generated preview component
+src/modules/gen/preview/
+

@@ -1,0 +1,94 @@
+<template>
+  <div class="app-shell">
+    <section class="pane pane--chat">
+      <header class="pane__header">
+        <h1 class="title">LWC Generator</h1>
+        <p class="subtitle">Partner with AI to craft polished Lightning Web Components.</p>
+      </header>
+      <div class="chat__history" role="log" aria-live="polite">
+        <template if:true={hasMessages}>
+          <template for:each={messages} for:item="message">
+            <article key={message.id} class="chat__message" data-role={message.role}>
+              <span class="chat__meta">{message.label}</span>
+              <p class="chat__text">{message.text}</p>
+            </article>
+          </template>
+        </template>
+        <template if:false={hasMessages}>
+          <div class="chat__empty">
+            Start the conversation to generate a component.
+          </div>
+        </template>
+      </div>
+      <div class="chat__composer">
+        <label class="chat__label" for="prompt">Describe the component</label>
+        <textarea
+          id="prompt"
+          class="chat__input"
+          value={prompt}
+          oninput={handleInput}
+          placeholder="Describe the LWC you want (plain HTML only; no lightning-base-components)...">
+        </textarea>
+        <div class="chat__actions">
+          <button
+            type="button"
+            class="chat__send"
+            onclick={generate}
+            disabled={isGenerateDisabled}>
+            {buttonLabel}
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <section class="pane pane--preview">
+      <div class="preview__header">
+        <div>
+          <h2 class="pane__title">Preview &amp; Code</h2>
+          <p class="pane__subtitle">Review the generated UI or inspect the source.</p>
+        </div>
+        <div class="view-toggle">
+          <button data-tab="preview" type="button" onclick={setTab} class={previewBtnClass}>Preview</button>
+          <button data-tab="code" type="button" onclick={setTab} class={codeBtnClass}>Code</button>
+        </div>
+      </div>
+
+      <div class="preview__body">
+        <template if:true={isPreview}>
+          <template if:true={hasGenerated}>
+            <gen-preview></gen-preview>
+          </template>
+          <template if:false={hasGenerated}>
+            <div class="preview__placeholder">
+              Waiting for AI component...
+            </div>
+          </template>
+        </template>
+
+        <template if:true={isCode}>
+          <template if:true={hasCode}>
+            <div class="code-view">
+              <div class="code-view__file">
+                <h3 class="code-view__title">preview.html</h3>
+                <pre class="code-view__block"><code>{codeHtml}</code></pre>
+              </div>
+              <div class="code-view__file">
+                <h3 class="code-view__title">preview.js</h3>
+                <pre class="code-view__block"><code>{codeJs}</code></pre>
+              </div>
+              <div class="code-view__file">
+                <h3 class="code-view__title">preview.css</h3>
+                <pre class="code-view__block"><code>{codeCss}</code></pre>
+              </div>
+            </div>
+          </template>
+          <template if:false={hasCode}>
+            <div class="preview__placeholder">
+              Code will appear here after you generate a component.
+            </div>
+          </template>
+        </template>
+      </div>
+    </section>
+  </div>
+</template>

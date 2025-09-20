@@ -1,0 +1,15 @@
+{
+    "lwc": {
+      "modules": [
+        { "dir": "$rootDir/src/modules" }
+      ]
+    },
+    "routes": [
+      {
+        "id": "home",
+        "path": "/",
+        "rootComponent": "app/shell"
+      }
+    ]
+  }
+  
