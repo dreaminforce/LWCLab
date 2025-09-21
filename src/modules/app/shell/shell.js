@@ -38,11 +38,15 @@ export default class Shell extends LightningElement {
       return null;
     }
 
-    const role = message.role;
+    const role = message.role === 'assistant' ? 'assistant' : 'user';
+    const isUser = role === 'user';
+
     return {
       ...message,
-      isUser: role === 'user',
-      avatarLabel: role === 'user' ? 'User avatar' : 'Assistant avatar',
+      role,
+      isUser,
+      label: isUser ? 'You' : 'LWable',
+      avatarLabel: isUser ? 'User avatar' : 'LWable avatar',
     };
   }
 
@@ -203,7 +207,7 @@ export default class Shell extends LightningElement {
     const base = {
       id: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
       role,
-      label: role === 'user' ? 'You' : 'Assistant',
+      label: role === 'user' ? 'You' : 'LWable',
       text,
     };
 
@@ -216,6 +220,7 @@ export default class Shell extends LightningElement {
       return;
     }
 
+    this.prompt = '';
     this.generating = true;
 
     const userMessage = this.createMessage('user', trimmedPrompt);
@@ -274,3 +279,4 @@ export default class Shell extends LightningElement {
     }
   }
 }
+
