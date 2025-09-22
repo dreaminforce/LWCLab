@@ -203,6 +203,15 @@ export default class Shell extends LightningElement {
     }, 1500);
   };
 
+
+  clearPromptInput() {
+    this.prompt = '';
+    const textarea = this.template.querySelector('[data-element-id="prompt-input"]');
+    if (textarea) {
+      textarea.value = '';
+    }
+  }
+
   createMessage(role, text) {
     const base = {
       id: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
@@ -220,7 +229,7 @@ export default class Shell extends LightningElement {
       return;
     }
 
-    this.prompt = '';
+    this.clearPromptInput();
     this.generating = true;
 
     const userMessage = this.createMessage('user', trimmedPrompt);
@@ -260,7 +269,7 @@ export default class Shell extends LightningElement {
       this.messages = confirmedMessages;
       this.persistMessages(confirmedMessages);
 
-      this.prompt = '';
+      this.clearPromptInput();
       window.location.hash = '#show';
       window.location.reload();
     } catch (error) {
@@ -279,4 +288,5 @@ export default class Shell extends LightningElement {
     }
   }
 }
+
 
