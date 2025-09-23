@@ -40,8 +40,9 @@ Once both processes are up, open http://localhost:3000. Enter a prompt in the ch
 ## Deploy to Salesforce
 1. Generate a component so the preview pane shows the latest HTML/JS/CSS.
 2. Click **Deploy to Salesforce** in the preview header.
-3. Enter your Salesforce username and password (append your security token if your org requires one).
-4. The server logs in with jsforce and deploys the `preview` Lightning Web Component bundle via the Metadata API.
+3. Choose a Lightning web component name (letters, numbers, underscores; must start with a letter) and tick the surfaces you want to expose (`lightning__AppPage`, `lightning__HomePage`, `lightning__RecordPage`).
+4. Enter your Salesforce username and password (append your security token if your org requires one).
+5. The server logs in with jsforce, bundles the generated source, and deploys it using the Metadata API.
 
 **Environment variables**
 - `SF_LOGIN_URL` (optional): override the login endpoint (use `https://test.salesforce.com` for sandboxes).

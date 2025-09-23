@@ -19,7 +19,8 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const GEN_DIR = path.resolve(process.cwd(), 'src/modules/gen/preview');
 const SF_LOGIN_URL = process.env.SF_LOGIN_URL || 'https://login.salesforce.com';
 const SF_API_VERSION = process.env.SF_API_VERSION || '60.0';
-const LWC_BUNDLE_NAME = 'preview';
+const DEFAULT_LWC_TARGETS = ['lightning__AppPage', 'lightning__HomePage', 'lightning__RecordPage'];
+const ALLOWED_LWC_TARGETS = new Set(DEFAULT_LWC_TARGETS);
 
 const DEPLOY_TIMEOUT_MS = Number(process.env.SF_DEPLOY_TIMEOUT_MS || '') || 5 * 60 * 1000;
 const DEPLOY_POLL_INTERVAL_MS = 5000;
@@ -161,16 +162,40 @@ function ensureHandlerStubs(js, handlerNames) {
   return code;
 }
 
-function createLightningBundleMetaXml(apiVersion = SF_API_VERSION) {
+function sanitizeBundleName(name) {
+  const trimmed = (name || '').trim();
+  if (!trimmed) {
+    return '';
+  }
+  if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(trimmed)) {
+    return '';
+  }
+  return trimmed;
+}
+
+function normalizeTargets(targets) {
+  const list = Array.isArray(targets) ? targets : [];
+  const filtered = list
+    .map((value) => (typeof value === 'string' ? value.trim() : ''))
+    .filter((value) => value && ALLOWED_LWC_TARGETS.has(value));
+  if (filtered.length > 0) {
+    return Array.from(new Set(filtered));
+  }
+  return DEFAULT_LWC_TARGETS;
+}
+
+function createLightningBundleMetaXml(apiVersion = SF_API_VERSION, targets = DEFAULT_LWC_TARGETS) {
   const version = apiVersion || SF_API_VERSION;
+  const normalizedTargets = normalizeTargets(targets);
+  const targetXml = normalizedTargets
+    .map((target) => `    <target>${target}</target>`)
+    .join('\n');
   return `<?xml version="1.0" encoding="UTF-8"?>
 <LightningComponentBundle xmlns="http://soap.sforce.com/2006/04/metadata">
   <apiVersion>${version}</apiVersion>
   <isExposed>true</isExposed>
   <targets>
-    <target>lightning__AppPage</target>
-    <target>lightning__HomePage</target>
-    <target>lightning__RecordPage</target>
+${targetXml}
   </targets>
 </LightningComponentBundle>
 `;
@@ -205,14 +230,14 @@ async function loadGeneratedPreview() {
   }
 }
 
-async function buildLwcDeployZip(bundleName, files, apiVersion = SF_API_VERSION) {
+async function buildLwcDeployZip(bundleName, files, apiVersion = SF_API_VERSION, targets = DEFAULT_LWC_TARGETS) {
   const zip = new JSZip();
   zip.file('package.xml', createPackageXml(bundleName, apiVersion));
   const bundleFolder = zip.folder('lwc').folder(bundleName);
   bundleFolder.file(`${bundleName}.html`, files.html ?? '');
   bundleFolder.file(`${bundleName}.js`, files.js ?? '');
   bundleFolder.file(`${bundleName}.css`, files.css ?? '');
-  bundleFolder.file(`${bundleName}.js-meta.xml`, createLightningBundleMetaXml(apiVersion));
+  bundleFolder.file(`${bundleName}.js-meta.xml`, createLightningBundleMetaXml(apiVersion, targets));
   return zip.generateAsync({ type: 'nodebuffer' });
 }
 
@@ -397,10 +422,17 @@ app.post('/api/reset', async (req, res) => {
 });
 
 app.post('/api/deploy', async (req, res) => {
-  const { username, password, loginUrl } = req.body || {};
+  const { username, password, loginUrl, bundleName, targets } = req.body || {};
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password are required.' });
   }
+
+  const normalizedBundleName = sanitizeBundleName(bundleName);
+  if (!normalizedBundleName) {
+    return res.status(400).json({ error: 'Enter a valid Lightning web component name (letters, numbers, underscores; must start with a letter).' });
+  }
+
+  const normalizedTargets = normalizeTargets(targets);
 
   let files;
   try {
@@ -417,7 +449,7 @@ app.post('/api/deploy', async (req, res) => {
   const resolvedLoginUrl = typeof loginUrl === 'string' && loginUrl.trim() ? loginUrl.trim() : SF_LOGIN_URL;
 
   try {
-    const zipBuffer = await buildLwcDeployZip(LWC_BUNDLE_NAME, files, SF_API_VERSION);
+    const zipBuffer = await buildLwcDeployZip(normalizedBundleName, files, SF_API_VERSION, normalizedTargets);
     const conn = new jsforce.Connection({ loginUrl: resolvedLoginUrl, version: SF_API_VERSION });
     await conn.login(username, password);
 
@@ -436,7 +468,8 @@ app.post('/api/deploy', async (req, res) => {
 
     return res.json({
       ok: true,
-      component: LWC_BUNDLE_NAME,
+      component: normalizedBundleName,
+      targets: normalizedTargets,
       status: result.status,
       id: result.id || deployId,
       completedDate: result.completedDate,

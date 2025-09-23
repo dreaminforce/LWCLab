@@ -3,6 +3,15 @@ import { LightningElement, track } from 'lwc';
 const CODE_STORAGE_KEY = 'lastCode';
 const CHAT_STORAGE_KEY = 'chatMessages';
 
+const DEFAULT_COMPONENT_NAME = 'PreviewComponent';
+const DEFAULT_DEPLOY_TARGETS = ['lightning__AppPage', 'lightning__HomePage', 'lightning__RecordPage'];
+const DEPLOY_TARGET_OPTIONS = [
+  { label: 'App Page', value: 'lightning__AppPage', description: 'Expose on App Builder app pages' },
+  { label: 'Home Page', value: 'lightning__HomePage', description: 'Expose on Lightning Home pages' },
+  { label: 'Record Page', value: 'lightning__RecordPage', description: 'Expose on Lightning Record pages' },
+];
+const BUNDLE_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_]*$/;
+
 export default class Shell extends LightningElement {
   prompt = '';
   tab = 'preview';
@@ -13,6 +22,8 @@ export default class Shell extends LightningElement {
   deployUsername = '';
   deployPassword = '';
   deployError = '';
+  deployBundleName = DEFAULT_COMPONENT_NAME;
+  deployTargets = [...DEFAULT_DEPLOY_TARGETS];
   @track code = { html: '', js: '', css: '' };
   @track messages = [];
 
@@ -37,8 +48,28 @@ export default class Shell extends LightningElement {
   get hasCode() {
     return Boolean((this.code?.html || '').trim() || (this.code?.js || '').trim() || (this.code?.css || '').trim());
   }
+  get deployTargetOptions() {
+    return DEPLOY_TARGET_OPTIONS.map((option) => ({
+      ...option,
+      selected: this.deployTargets.includes(option.value),
+    }));
+  }
+
+  get hasSelectedTargets() {
+    return this.deployTargets.length > 0;
+  }
+
+  get isValidDeployName() {
+    return BUNDLE_NAME_PATTERN.test((this.deployBundleName || '').trim());
+  }
+
   get canSubmitDeployment() {
-    return Boolean(this.deployUsername.trim() && this.deployPassword);
+    return Boolean(
+      this.deployUsername.trim() &&
+      this.deployPassword &&
+      this.isValidDeployName &&
+      this.hasSelectedTargets
+    );
   }
   get codeHtml() { return this.code?.html || ''; }
   get codeJs() { return this.code?.js || ''; }
@@ -218,6 +249,8 @@ export default class Shell extends LightningElement {
     this.deployUsername = '';
     this.deployPassword = '';
     this.deployError = '';
+    this.deployBundleName = DEFAULT_COMPONENT_NAME;
+    this.deployTargets = [...DEFAULT_DEPLOY_TARGETS];
   }
 
   openDeployModal = () => {
@@ -230,7 +263,7 @@ export default class Shell extends LightningElement {
 
     if (typeof window !== 'undefined') {
       window.requestAnimationFrame(() => {
-        const input = this.template.querySelector('[data-field="username"]');
+        const input = this.template.querySelector('[data-field="bundle"]');
         if (input) {
           input.focus();
         }
@@ -257,7 +290,27 @@ export default class Shell extends LightningElement {
       this.deployUsername = value;
     } else if (field === 'password') {
       this.deployPassword = value;
+    } else if (field === 'bundle') {
+      this.deployBundleName = value;
     }
+    this.deployError = '';
+  };
+
+  toggleDeployTarget = (event) => {
+    const value = event?.target?.value;
+    const isChecked = Boolean(event?.target?.checked);
+    if (!value) {
+      return;
+    }
+
+    if (isChecked) {
+      if (!this.deployTargets.includes(value)) {
+        this.deployTargets = [...this.deployTargets, value];
+      }
+    } else {
+      this.deployTargets = this.deployTargets.filter((target) => target !== value);
+    }
+
     this.deployError = '';
   };
 
@@ -269,8 +322,21 @@ export default class Shell extends LightningElement {
 
     const username = this.deployUsername.trim();
     const password = this.deployPassword;
+    const bundleName = (this.deployBundleName || '').trim();
+    const targets = Array.from(new Set(this.deployTargets));
+
     if (!username || !password) {
       this.deployError = 'Username and password are required.';
+      return;
+    }
+
+    if (!BUNDLE_NAME_PATTERN.test(bundleName)) {
+      this.deployError = 'Component name must start with a letter and can contain only letters, numbers, or underscores.';
+      return;
+    }
+
+    if (targets.length === 0) {
+      this.deployError = 'Select at least one target for the component.';
       return;
     }
 
@@ -281,7 +347,7 @@ export default class Shell extends LightningElement {
       const response = await fetch('http://localhost:3001/api/deploy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username, password, bundleName, targets }),
       });
 
       let data;
@@ -298,7 +364,7 @@ export default class Shell extends LightningElement {
       }
 
       const status = (data?.status || 'Succeeded').toLowerCase();
-      const component = data?.component || 'preview';
+      const component = data?.component || bundleName;
 
       this.deploying = false;
       this.closeDeployModal();

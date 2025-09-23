@@ -176,6 +176,45 @@
         <p class="deploy-modal__subtitle">Enter your Salesforce credentials to deploy the current component.</p>
         <form class="deploy-modal__form" onsubmit={submitDeployment}>
           <div class="deploy-modal__field">
+            <label class="deploy-modal__label" for="deploy-bundle">Component Name</label>
+            <input
+              id="deploy-bundle"
+              class="deploy-modal__input"
+              type="text"
+              data-field="bundle"
+              value={deployBundleName}
+              oninput={handleDeployInput}
+              autocomplete="off"
+              placeholder="MyComponent"
+              pattern="[A-Za-z][A-Za-z0-9_]*"
+              required
+              autofocus
+              spellcheck="false"
+            />
+            <p class="deploy-modal__hint">Letters, numbers, and underscores only. Must start with a letter.</p>
+          </div>
+          <div class="deploy-modal__field">
+            <span class="deploy-modal__label">Expose On</span>
+            <div class="deploy-modal__targets">
+              <template for:each={deployTargetOptions} for:item="option">
+                <label key={option.value} class="deploy-target">
+                  <input
+                    type="checkbox"
+                    class="deploy-target__input"
+                    value={option.value}
+                    checked={option.selected}
+                    onchange={toggleDeployTarget}
+                  />
+                  <div class="deploy-target__details">
+                    <span class="deploy-target__label">{option.label}</span>
+                    <span class="deploy-target__description">{option.description}</span>
+                  </div>
+                </label>
+              </template>
+            </div>
+            <p class="deploy-modal__hint">Select at least one Lightning Experience surface.</p>
+          </div>
+          <div class="deploy-modal__field">
             <label class="deploy-modal__label" for="deploy-username">Username</label>
             <input
               id="deploy-username"
@@ -187,7 +226,6 @@
               autocomplete="username"
               placeholder="name@example.com"
               required
-              autofocus
             />
           </div>
           <div class="deploy-modal__field">
