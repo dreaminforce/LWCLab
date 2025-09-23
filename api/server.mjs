@@ -6,6 +6,8 @@ import cors from 'cors';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import OpenAI from 'openai';
+import jsforce from 'jsforce';
+import JSZip from 'jszip';
 
 const PORT = 3001;
 const app = express();
@@ -15,6 +17,33 @@ app.use(express.json({ limit: '2mb' }));
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const GEN_DIR = path.resolve(process.cwd(), 'src/modules/gen/preview');
+const SF_LOGIN_URL = process.env.SF_LOGIN_URL || 'https://login.salesforce.com';
+const SF_API_VERSION = process.env.SF_API_VERSION || '60.0';
+const LWC_BUNDLE_NAME = 'preview';
+
+const DEPLOY_TIMEOUT_MS = Number(process.env.SF_DEPLOY_TIMEOUT_MS || '') || 5 * 60 * 1000;
+const DEPLOY_POLL_INTERVAL_MS = 5000;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function waitForDeployCompletion(conn, deployId, timeoutMs = DEPLOY_TIMEOUT_MS, pollIntervalMs = DEPLOY_POLL_INTERVAL_MS) {
+  if (!deployId) {
+    throw new Error('Missing deployment id.');
+  }
+
+  const deadline = Date.now() + timeoutMs;
+  let lastResult = null;
+
+  while (Date.now() <= deadline) {
+    lastResult = await conn.metadata.checkDeployStatus(deployId, true);
+    if (lastResult?.done) {
+      return lastResult;
+    }
+    await sleep(pollIntervalMs);
+  }
+
+  throw new Error('Deployment timed out while waiting for Salesforce to finish.');
+}
 
 // ---- helpers ----
 function sanitizeHtml(html, info = {}) {
@@ -130,6 +159,98 @@ function ensureHandlerStubs(js, handlerNames) {
     code = code.replace(classHeaderRe, (m) => m + stubs);
   }
   return code;
+}
+
+function createLightningBundleMetaXml(apiVersion = SF_API_VERSION) {
+  const version = apiVersion || SF_API_VERSION;
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<LightningComponentBundle xmlns="http://soap.sforce.com/2006/04/metadata">
+  <apiVersion>${version}</apiVersion>
+  <isExposed>true</isExposed>
+  <targets>
+    <target>lightning__AppPage</target>
+    <target>lightning__HomePage</target>
+    <target>lightning__RecordPage</target>
+  </targets>
+</LightningComponentBundle>
+`;
+}
+
+function createPackageXml(bundleName, apiVersion = SF_API_VERSION) {
+  const version = apiVersion || SF_API_VERSION;
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<Package xmlns="http://soap.sforce.com/2006/04/metadata">
+  <types>
+    <members>${bundleName}</members>
+    <name>LightningComponentBundle</name>
+  </types>
+  <version>${version}</version>
+</Package>
+`;
+}
+
+async function loadGeneratedPreview() {
+  try {
+    const [html, js, css] = await Promise.all([
+      fs.readFile(path.join(GEN_DIR, 'preview.html'), 'utf8'),
+      fs.readFile(path.join(GEN_DIR, 'preview.js'), 'utf8'),
+      fs.readFile(path.join(GEN_DIR, 'preview.css'), 'utf8'),
+    ]);
+    return { html, js, css };
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      return null;
+    }
+    throw error;
+  }
+}
+
+async function buildLwcDeployZip(bundleName, files, apiVersion = SF_API_VERSION) {
+  const zip = new JSZip();
+  zip.file('package.xml', createPackageXml(bundleName, apiVersion));
+  const bundleFolder = zip.folder('lwc').folder(bundleName);
+  bundleFolder.file(`${bundleName}.html`, files.html ?? '');
+  bundleFolder.file(`${bundleName}.js`, files.js ?? '');
+  bundleFolder.file(`${bundleName}.css`, files.css ?? '');
+  bundleFolder.file(`${bundleName}.js-meta.xml`, createLightningBundleMetaXml(apiVersion));
+  return zip.generateAsync({ type: 'nodebuffer' });
+}
+
+function extractDeployFailureMessage(result) {
+  if (!result) {
+    return 'Deployment failed';
+  }
+  const failures = result.details?.componentFailures;
+  const items = Array.isArray(failures) ? failures : failures ? [failures] : [];
+  const messages = items
+    .map((item) => {
+      if (!item) {
+        return null;
+      }
+      const location = item.fileName ? `${item.fileName}${item.lineNumber ? `:${item.lineNumber}` : ''}` : '';
+      const problem = item.problem || item.message || item.error;
+      if (location && problem) {
+        return `${location} - ${problem}`;
+      }
+      return problem || location || null;
+    })
+    .filter(Boolean);
+  if (messages.length > 0) {
+    return messages.join('\n');
+  }
+  return result.errorMessage || 'Deployment failed';
+}
+
+function normalizeComponentSuccesses(successes) {
+  const items = Array.isArray(successes) ? successes : successes ? [successes] : [];
+  return items
+    .map((item) => ({
+      fullName: item?.fullName || '',
+      fileName: item?.fileName || '',
+      created: item?.created ?? false,
+      changed: item?.changed ?? false,
+    }))
+    .filter((entry) => entry.fullName || entry.fileName);
 }
 
 async function writePreviewFiles({ html, js, css }) {
@@ -272,6 +393,59 @@ app.post('/api/reset', async (req, res) => {
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Reset failed' });
+  }
+});
+
+app.post('/api/deploy', async (req, res) => {
+  const { username, password, loginUrl } = req.body || {};
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Username and password are required.' });
+  }
+
+  let files;
+  try {
+    files = await loadGeneratedPreview();
+  } catch (error) {
+    console.error('Failed to load generated preview', error);
+    return res.status(500).json({ error: 'Could not read generated component from disk.' });
+  }
+
+  if (!files) {
+    return res.status(400).json({ error: 'No generated component available. Generate a component before deploying.' });
+  }
+
+  const resolvedLoginUrl = typeof loginUrl === 'string' && loginUrl.trim() ? loginUrl.trim() : SF_LOGIN_URL;
+
+  try {
+    const zipBuffer = await buildLwcDeployZip(LWC_BUNDLE_NAME, files, SF_API_VERSION);
+    const conn = new jsforce.Connection({ loginUrl: resolvedLoginUrl, version: SF_API_VERSION });
+    await conn.login(username, password);
+
+    const deployStart = await conn.metadata.deploy(zipBuffer, { singlePackage: true });
+    const deployId = typeof deployStart === 'string' ? deployStart : deployStart?.id;
+    const result = deployStart && typeof deployStart === 'object' && deployStart.done && deployStart.details
+      ? deployStart
+      : await waitForDeployCompletion(conn, deployId);
+
+    if (!result.success) {
+      const message = extractDeployFailureMessage(result);
+      return res.status(502).json({ error: message || 'Deployment failed' });
+    }
+
+    const successes = normalizeComponentSuccesses(result.details?.componentSuccesses);
+
+    return res.json({
+      ok: true,
+      component: LWC_BUNDLE_NAME,
+      status: result.status,
+      id: result.id || deployId,
+      completedDate: result.completedDate,
+      successes,
+    });
+  } catch (error) {
+    console.error('Salesforce deployment failed', error);
+    const message = error?.message || 'Deployment failed';
+    return res.status(500).json({ error: message });
   }
 });
 

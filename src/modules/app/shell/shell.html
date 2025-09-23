@@ -63,9 +63,18 @@
           <h2 class="pane__title">Preview &amp; Code</h2>
           <p class="pane__subtitle">Review the generated UI or inspect the source.</p>
         </div>
-        <div class="view-toggle">
-          <button data-tab="preview" type="button" onclick={setTab} class={previewBtnClass}>Preview</button>
-          <button data-tab="code" type="button" onclick={setTab} class={codeBtnClass}>Code</button>
+        <div class="preview__actions">
+          <div class="view-toggle">
+            <button data-tab="preview" type="button" onclick={setTab} class={previewBtnClass}>Preview</button>
+            <button data-tab="code" type="button" onclick={setTab} class={codeBtnClass}>Code</button>
+          </div>
+          <button
+            type="button"
+            class="preview__deploy"
+            onclick={openDeployModal}
+            disabled={isDeployDisabled}>
+            {deployButtonLabel}
+          </button>
         </div>
       </div>
 
@@ -159,6 +168,66 @@
         </template>
       </div>
     </section>
+  <template if:true={showDeployModal}>
+    <div class="deploy-modal">
+      <div class="deploy-modal__backdrop" onclick={handleDeployBackdropClick}></div>
+      <div class="deploy-modal__panel" role="dialog" aria-modal="true" aria-labelledby="deploy-modal-title">
+        <h3 class="deploy-modal__title" id="deploy-modal-title">Deploy to Salesforce</h3>
+        <p class="deploy-modal__subtitle">Enter your Salesforce credentials to deploy the current component.</p>
+        <form class="deploy-modal__form" onsubmit={submitDeployment}>
+          <div class="deploy-modal__field">
+            <label class="deploy-modal__label" for="deploy-username">Username</label>
+            <input
+              id="deploy-username"
+              class="deploy-modal__input"
+              type="text"
+              data-field="username"
+              value={deployUsername}
+              oninput={handleDeployInput}
+              autocomplete="username"
+              placeholder="name@example.com"
+              required
+              autofocus
+            />
+          </div>
+          <div class="deploy-modal__field">
+            <label class="deploy-modal__label" for="deploy-password">Password</label>
+            <input
+              id="deploy-password"
+              class="deploy-modal__input"
+              type="password"
+              data-field="password"
+              value={deployPassword}
+              oninput={handleDeployInput}
+              autocomplete="current-password"
+              placeholder="Your Salesforce password"
+              required
+            />
+            <p class="deploy-modal__hint">Append your security token to the password if your org requires one.</p>
+          </div>
+          <template if:true={deployError}>
+            <div class="deploy-modal__error" role="alert">{deployError}</div>
+          </template>
+          <div class="deploy-modal__actions">
+            <button
+              type="button"
+              class="deploy-modal__cancel"
+              onclick={closeDeployModal}
+              disabled={deploying}>
+              Cancel
+            </button>
+            <button
+              type="submit"
+              class="deploy-modal__submit"
+              disabled={deploySubmitDisabled}>
+              <template if:true={deploying}>Deploying...</template>
+              <template if:false={deploying}>Deploy</template>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </template>
   </div>
 </template>
 

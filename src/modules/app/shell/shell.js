@@ -8,12 +8,18 @@ export default class Shell extends LightningElement {
   tab = 'preview';
   generating = false;
   hasGenerated = false;
+  deploying = false;
+  showDeployModal = false;
+  deployUsername = '';
+  deployPassword = '';
+  deployError = '';
   @track code = { html: '', js: '', css: '' };
   @track messages = [];
 
   get isPreview() { return this.tab === 'preview'; }
   get isCode() { return this.tab === 'code'; }
   get buttonLabel() { return this.generating ? 'Generating...' : 'Generate'; }
+  get deployButtonLabel() { return this.deploying ? 'Deploying...' : 'Deploy to Salesforce'; }
   get previewBtnClass() {
     return this.isPreview
       ? 'view-toggle__button view-toggle__button--active'
@@ -25,9 +31,14 @@ export default class Shell extends LightningElement {
       : 'view-toggle__button';
   }
   get isGenerateDisabled() { return this.generating || !this.prompt.trim(); }
+  get isDeployDisabled() { return this.deploying || this.generating || !this.hasCode; }
+  get deploySubmitDisabled() { return this.deploying || !this.canSubmitDeployment; }
   get hasMessages() { return this.messages.length > 0; }
   get hasCode() {
     return Boolean((this.code?.html || '').trim() || (this.code?.js || '').trim() || (this.code?.css || '').trim());
+  }
+  get canSubmitDeployment() {
+    return Boolean(this.deployUsername.trim() && this.deployPassword);
   }
   get codeHtml() { return this.code?.html || ''; }
   get codeJs() { return this.code?.js || ''; }
@@ -203,6 +214,102 @@ export default class Shell extends LightningElement {
     }, 1500);
   };
 
+  resetDeployForm() {
+    this.deployUsername = '';
+    this.deployPassword = '';
+    this.deployError = '';
+  }
+
+  openDeployModal = () => {
+    if (this.isDeployDisabled) {
+      return;
+    }
+
+    this.resetDeployForm();
+    this.showDeployModal = true;
+
+    if (typeof window !== 'undefined') {
+      window.requestAnimationFrame(() => {
+        const input = this.template.querySelector('[data-field="username"]');
+        if (input) {
+          input.focus();
+        }
+      });
+    }
+  };
+
+  closeDeployModal = () => {
+    if (this.deploying) {
+      return;
+    }
+    this.showDeployModal = false;
+    this.resetDeployForm();
+  };
+
+  handleDeployBackdropClick = () => {
+    this.closeDeployModal();
+  };
+
+  handleDeployInput = (event) => {
+    const field = event.target?.dataset?.field;
+    const value = event.target?.value ?? '';
+    if (field === 'username') {
+      this.deployUsername = value;
+    } else if (field === 'password') {
+      this.deployPassword = value;
+    }
+    this.deployError = '';
+  };
+
+  submitDeployment = async (event) => {
+    event?.preventDefault?.();
+    if (this.deploying) {
+      return;
+    }
+
+    const username = this.deployUsername.trim();
+    const password = this.deployPassword;
+    if (!username || !password) {
+      this.deployError = 'Username and password are required.';
+      return;
+    }
+
+    this.deployError = '';
+    this.deploying = true;
+
+    try {
+      const response = await fetch('http://localhost:3001/api/deploy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+
+      let data;
+      try {
+        data = await response.json();
+      } catch {
+        data = null;
+      }
+
+      if (!response.ok || !data?.ok) {
+        const message = data?.error || 'Deployment failed.';
+        this.deployError = message;
+        return;
+      }
+
+      const status = (data?.status || 'Succeeded').toLowerCase();
+      const component = data?.component || 'preview';
+
+      this.deploying = false;
+      this.closeDeployModal();
+      // eslint-disable-next-line no-alert
+      alert(`Deployment ${status} for ${component}.`);
+    } catch {
+      this.deployError = 'Deployment failed. Check API server logs.';
+    } finally {
+      this.deploying = false;
+    }
+  };
 
   clearPromptInput() {
     this.prompt = '';

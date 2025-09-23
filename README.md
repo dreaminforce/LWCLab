@@ -37,6 +37,19 @@ LWable lets you describe a Lightning Web Component in natural language and previ
 
 Once both processes are up, open http://localhost:3000. Enter a prompt in the chat panel, click **Generate**, and the preview pane will refresh with the latest component. The last conversation and code snapshot are cached in `sessionStorage` so a browser refresh keeps your progress.
 
+## Deploy to Salesforce
+1. Generate a component so the preview pane shows the latest HTML/JS/CSS.
+2. Click **Deploy to Salesforce** in the preview header.
+3. Enter your Salesforce username and password (append your security token if your org requires one).
+4. The server logs in with jsforce and deploys the `preview` Lightning Web Component bundle via the Metadata API.
+
+**Environment variables**
+- `SF_LOGIN_URL` (optional): override the login endpoint (use `https://test.salesforce.com` for sandboxes).
+- `SF_API_VERSION` (optional): defaults to `60.0` if not set.
+- `SF_DEPLOY_TIMEOUT_MS` (optional): override the deploy wait timeout (defaults to 300000 ms).
+
+Credentials are sent only to your local API server and are never stored.
+
 ## Daily Workflow Tips
 - Every time you generate, the files in `src/modules/gen/preview` are overwritten. I've added them to gitIgnore so that they don't bug you on every refresh.
 - The API sanitises generated markup to enforce valid LWC semantics; check the terminal logs if a prompt fails.
@@ -49,5 +62,5 @@ Once both processes are up, open http://localhost:3000. Enter a prompt in the ch
 ## Roadmap
 - Chat UI to look more like Chatting.
 - Download LWC Option.
-- Deploy component to Salesforce Org.
+- [x] Deploy component to Salesforce Org.
 - Use Structured Outputs

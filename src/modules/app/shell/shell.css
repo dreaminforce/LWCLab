@@ -254,6 +254,12 @@
   margin-bottom: 20px;
 }
 
+.preview__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .pane__title {
   margin: 0;
   font-size: 20px;
@@ -272,6 +278,37 @@
   border-radius: 12px;
   padding: 4px;
   background: #f9fafb;
+}
+
+.preview__deploy {
+  height: 40px;
+  padding: 0 18px;
+  border: none;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: #ffffff;
+  background: linear-gradient(135deg, #10b981, #14b8a6);
+  cursor: pointer;
+  box-shadow: 0 14px 28px -20px rgba(14, 116, 144, 0.9);
+  transition: transform 140ms ease, box-shadow 140ms ease, opacity 140ms ease;
+}
+
+.preview__deploy:hover:not([disabled]) {
+  transform: translateY(-1px);
+  box-shadow: 0 20px 38px -26px rgba(13, 148, 136, 0.85);
+}
+
+.preview__deploy:active:not([disabled]) {
+  transform: translateY(0);
+}
+
+.preview__deploy[disabled] {
+  cursor: not-allowed;
+  opacity: 0.45;
+  box-shadow: none;
+  transform: none;
 }
 
 .view-toggle__button {
@@ -443,6 +480,163 @@
   white-space: inherit;
 }
 
+
+.deploy-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1010;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.deploy-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(4px);
+}
+
+.deploy-modal__panel {
+  position: relative;
+  width: min(420px, 100%);
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 30px;
+  box-shadow: 0 32px 64px -40px rgba(15, 23, 42, 0.62), 0 18px 36px -28px rgba(15, 23, 42, 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  z-index: 1;
+}
+
+.deploy-modal__title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: #0f172a;
+}
+
+.deploy-modal__subtitle {
+  margin: 0;
+  font-size: 14px;
+  color: #475569;
+  line-height: 1.5;
+}
+
+.deploy-modal__form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.deploy-modal__field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.deploy-modal__label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #64748b;
+}
+
+.deploy-modal__input {
+  height: 44px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  background: #f8fafc;
+  font-size: 14px;
+  color: #0f172a;
+  transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
+}
+
+.deploy-modal__input:focus {
+  outline: none;
+  border-color: rgba(59, 130, 246, 0.65);
+  background: #ffffff;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.12);
+}
+
+.deploy-modal__hint {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #6b7280;
+  line-height: 1.4;
+}
+
+.deploy-modal__error {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  color: #b91c1c;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.deploy-modal__actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.deploy-modal__cancel {
+  flex: 1;
+  height: 42px;
+  border: none;
+  border-radius: 12px;
+  background: rgba(148, 163, 184, 0.16);
+  color: #334155;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease, opacity 140ms ease;
+}
+
+.deploy-modal__cancel:hover:not([disabled]) {
+  background: rgba(148, 163, 184, 0.24);
+}
+
+.deploy-modal__cancel[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.deploy-modal__submit {
+  flex: 1;
+  height: 42px;
+  border: none;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #2563eb, #4f46e5);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: transform 140ms ease, box-shadow 140ms ease, opacity 140ms ease;
+}
+
+.deploy-modal__submit:hover:not([disabled]) {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 32px -24px rgba(79, 70, 229, 0.75);
+}
+
+.deploy-modal__submit:active:not([disabled]) {
+  transform: translateY(0);
+}
+
+.deploy-modal__submit[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
 @media (max-width: 1080px) {
   :host {
     padding: 24px;
@@ -462,6 +656,25 @@
 }
 
 @media (max-width: 640px) {
+
+  .preview__actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .preview__deploy {
+    width: 100%;
+  }
+
+  .deploy-modal {
+    padding: 16px;
+  }
+
+  .deploy-modal__panel {
+    width: 100%;
+    padding: 24px;
+  }
   :host {
     padding: 20px;
   }
