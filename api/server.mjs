@@ -288,7 +288,7 @@ async function writePreviewFiles({ html, js, css }) {
 const STUB = {
   html: `<template>
   <div style="padding:12px; font:500 16px/1.4 system-ui, sans-serif;">
-    Waiting for AI component…
+    Waiting for AI component...
   </div>
 </template>`,
   js: `import { LightningElement } from 'lwc';
@@ -386,7 +386,7 @@ Return ONLY JSON with keys "html","js","css" (no backticks).`;
     }
 
     if (!html.includes('<template')) {
-      return res.status(422).json({ error: 'HTML must contain <template>…</template>' });
+      return res.status(422).json({ error: 'HTML must contain <template>...</template>' });
     }
     if (!/export\s+default\s+class\s+Preview\s+extends\s+LightningElement/.test(js)) {
       return res.status(422).json({ error: 'JS must export class Preview extends LightningElement' });
@@ -418,6 +418,42 @@ app.post('/api/reset', async (req, res) => {
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Reset failed' });
+  }
+});
+
+app.get('/api/preview', async (req, res) => {
+  try {
+    const files = await loadGeneratedPreview();
+    if (!files) {
+      return res.status(404).json({ error: 'No generated component available. Generate or update the component before refreshing.' });
+    }
+    res.json({ ok: true, code: files });
+  } catch (error) {
+    console.error('Failed to read generated preview', error);
+    res.status(500).json({ error: 'Could not read generated component from disk.' });
+  }
+});
+
+app.post('/api/preview', async (req, res) => {
+  const { html, js, css } = req.body || {};
+  const nextHtml = typeof html === 'string' ? html : '';
+  const nextJs = typeof js === 'string' ? js : '';
+  const nextCss = typeof css === 'string' ? css : '';
+
+  if (!nextHtml.trim()) {
+    return res.status(400).json({ error: 'HTML content is required to update the preview.' });
+  }
+
+  if (!nextHtml.includes('<template')) {
+    return res.status(422).json({ error: 'HTML must contain <template>...</template>' });
+  }
+
+  try {
+    await writePreviewFiles({ html: nextHtml, js: nextJs, css: nextCss });
+    res.json({ ok: true, code: { html: nextHtml, js: nextJs, css: nextCss } });
+  } catch (error) {
+    console.error('Failed to write generated preview', error);
+    res.status(500).json({ error: 'Could not save generated component to disk.' });
   }
 });
 

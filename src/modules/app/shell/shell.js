@@ -24,6 +24,8 @@ export default class Shell extends LightningElement {
   deployError = '';
   deployBundleName = DEFAULT_COMPONENT_NAME;
   deployTargets = [...DEFAULT_DEPLOY_TARGETS];
+  refreshing = false;
+  editorNeedsSync = false;
   @track code = { html: '', js: '', css: '' };
   @track messages = [];
 
@@ -31,6 +33,8 @@ export default class Shell extends LightningElement {
   get isCode() { return this.tab === 'code'; }
   get buttonLabel() { return this.generating ? 'Generating...' : 'Generate'; }
   get deployButtonLabel() { return this.deploying ? 'Deploying...' : 'Deploy to Salesforce'; }
+  get refreshButtonLabel() { return this.refreshing ? 'Refreshing...' : 'Refresh Preview'; }
+  get isRefreshDisabled() { return this.refreshing || this.generating || !this.hasCode; }
   get previewBtnClass() {
     return this.isPreview
       ? 'view-toggle__button view-toggle__button--active'
@@ -140,6 +144,40 @@ export default class Shell extends LightningElement {
     window.sessionStorage.removeItem(CODE_STORAGE_KEY);
     this.hasGenerated = false;
     this.code = { html: '', js: '', css: '' };
+    this.editorNeedsSync = false;
+  }
+
+  renderedCallback() {
+    if (!this.editorNeedsSync) {
+      return;
+    }
+
+    if (!this.isCode || !this.hasCode) {
+      return;
+    }
+
+    const editors = this.template.querySelectorAll('.code-view__editor');
+    if (!editors || editors.length === 0) {
+      return;
+    }
+
+    editors.forEach((editor) => {
+      const field = editor?.dataset?.target;
+      if (!field) {
+        return;
+      }
+
+      const snippet = this.getCodeSnippet(field);
+      if (typeof snippet !== 'string') {
+        return;
+      }
+
+      if (editor.value !== snippet) {
+        editor.value = snippet;
+      }
+    });
+
+    this.editorNeedsSync = false;
   }
 
   restoreCode() {
@@ -147,10 +185,15 @@ export default class Shell extends LightningElement {
       const raw = window.sessionStorage.getItem(CODE_STORAGE_KEY);
       if (raw) {
         this.code = JSON.parse(raw);
+        this.editorNeedsSync = true;
+        return;
       }
     } catch {
-      this.code = { html: '', js: '', css: '' };
+      // fall through to reset the code state
     }
+
+    this.code = { html: '', js: '', css: '' };
+    this.editorNeedsSync = false;
   }
 
   restoreMessages() {
@@ -194,7 +237,102 @@ export default class Shell extends LightningElement {
   };
 
   setTab = (event) => {
-    this.tab = event.currentTarget.dataset.tab;
+    const nextTab = event?.currentTarget?.dataset?.tab;
+    if (!nextTab || this.tab === nextTab) {
+      return;
+    }
+
+    this.tab = nextTab;
+
+    if (nextTab === 'code') {
+      this.editorNeedsSync = true;
+    }
+  };
+
+  handleCodeInput = (event) => {
+    const field = event?.target?.dataset?.target;
+    if (!field) {
+      return;
+    }
+
+    const value = event.target?.value ?? '';
+    if (!['html', 'js', 'css'].includes(field)) {
+      return;
+    }
+
+    const nextCode = {
+      ...this.code,
+      [field]: value,
+    };
+
+    this.code = nextCode;
+    this.hasGenerated = true;
+
+    try {
+      window.sessionStorage.setItem(CODE_STORAGE_KEY, JSON.stringify(nextCode));
+    } catch {
+      // ignore storage errors
+    }
+  };
+
+  refreshPreview = async () => {
+    if (this.refreshing || !this.hasCode) {
+      return;
+    }
+
+    this.refreshing = true;
+
+    const payload = {
+      html: this.codeHtml,
+      js: this.codeJs,
+      css: this.codeCss,
+    };
+
+    try {
+      const response = await fetch('http://localhost:3001/api/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      let data = null;
+
+      try {
+        data = await response.json();
+      } catch {
+        data = null;
+      }
+
+      if (!response.ok || !data?.ok) {
+        const message = data?.error || 'Refresh failed. Check API server logs.';
+        throw new Error(message);
+      }
+
+      const savedCode = {
+        html: data?.code?.html ?? payload.html,
+        js: data?.code?.js ?? payload.js,
+        css: data?.code?.css ?? payload.css,
+      };
+
+      this.code = savedCode;
+      this.editorNeedsSync = true;
+
+      try {
+        window.sessionStorage.setItem(CODE_STORAGE_KEY, JSON.stringify(savedCode));
+      } catch {
+        // ignore storage errors
+      }
+
+      this.hasGenerated = true;
+      window.location.hash = '#show';
+      window.location.reload();
+    } catch (error) {
+      const message = error?.message || 'Refresh failed. Check API server logs.';
+      // eslint-disable-next-line no-alert
+      alert(message);
+    } finally {
+      this.refreshing = false;
+    }
   };
 
   copyCode = async (event) => {
@@ -427,6 +565,7 @@ export default class Shell extends LightningElement {
 
       const data = await response.json();
       this.code = data.code ?? { html: '', js: '', css: '' };
+      this.editorNeedsSync = true;
 
       try {
         window.sessionStorage.setItem(CODE_STORAGE_KEY, JSON.stringify(this.code));
@@ -461,5 +600,3 @@ export default class Shell extends LightningElement {
     }
   }
 }
-
-

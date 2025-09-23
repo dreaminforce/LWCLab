@@ -280,6 +280,36 @@
   background: #f9fafb;
 }
 
+.preview__refresh {
+  height: 40px;
+  padding: 0 16px;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: #1f2937;
+  background: #ffffff;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease, box-shadow 140ms ease, opacity 140ms ease;
+}
+
+.preview__refresh:hover:not([disabled]) {
+  background: rgba(148, 163, 184, 0.15);
+  color: #111827;
+  box-shadow: 0 16px 34px -24px rgba(148, 163, 184, 0.8);
+}
+
+.preview__refresh:active:not([disabled]) {
+  background: rgba(148, 163, 184, 0.22);
+}
+
+.preview__refresh[disabled] {
+  cursor: not-allowed;
+  opacity: 0.45;
+  box-shadow: none;
+}
+
 .preview__deploy {
   height: 40px;
   padding: 0 18px;
@@ -459,26 +489,35 @@
   display: block;
 }
 
-.code-view__block {
-  margin: 0;
+.code-view__editor {
+  width: 100%;
+  min-height: 240px;
   padding: 16px;
   border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.4);
   background: #0f172a;
   color: #f9fafb;
+  font-family: 'SF Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 13px;
   line-height: 1.55;
+  resize: vertical;
   overflow: auto;
   box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.2);
-  white-space: pre-wrap;
-  word-break: break-word;
+  white-space: pre;
+  tab-size: 2;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
 }
 
-.code-view__block code {
-  display: block;
-  color: inherit;
-  font-family: 'SF Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-  white-space: inherit;
+.code-view__editor:focus {
+  outline: none;
+  border-color: rgba(59, 130, 246, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.55), 0 0 0 3px rgba(59, 130, 246, 0.12);
 }
+
+.code-view__editor::selection {
+  background: rgba(96, 165, 250, 0.35);
+}
+
 
 
 .deploy-modal {
@@ -722,6 +761,14 @@
     width: 100%;
   }
 
+  .preview__refresh {
+    width: 100%;
+  }
+
+  .code-view__editor {
+    min-height: 200px;
+  }
+
   .deploy-modal {
     padding: 16px;
   }
@@ -750,4 +797,3 @@
     padding: 8px 14px;
   }
 }
-

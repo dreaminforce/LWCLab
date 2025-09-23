@@ -70,6 +70,13 @@
           </div>
           <button
             type="button"
+            class="preview__refresh"
+            onclick={refreshPreview}
+            disabled={isRefreshDisabled}>
+            {refreshButtonLabel}
+          </button>
+          <button
+            type="button"
             class="preview__deploy"
             onclick={openDeployModal}
             disabled={isDeployDisabled}>
@@ -118,7 +125,18 @@
                     <span class="visually-hidden">Copy preview.html</span>
                   </button>
                 </div>
-                <pre class="code-view__block"><code>{codeHtml}</code></pre>
+                <textarea
+                  class="code-view__editor"
+                  data-target="html"
+                  value={codeHtml}
+                  oninput={handleCodeInput}
+                  spellcheck="false"
+                  wrap="off"
+                  autocapitalize="off"
+                  autocomplete="off"
+                  autocorrect="off"
+                  aria-label="Edit preview.html"
+                  rows="18"></textarea>
               </div>
               <div class="code-view__file">
                 <div class="code-view__header">
@@ -137,7 +155,18 @@
                     <span class="visually-hidden">Copy preview.js</span>
                   </button>
                 </div>
-                <pre class="code-view__block"><code>{codeJs}</code></pre>
+                <textarea
+                  class="code-view__editor"
+                  data-target="js"
+                  value={codeJs}
+                  oninput={handleCodeInput}
+                  spellcheck="false"
+                  wrap="off"
+                  autocapitalize="off"
+                  autocomplete="off"
+                  autocorrect="off"
+                  aria-label="Edit preview.js"
+                  rows="18"></textarea>
               </div>
               <div class="code-view__file">
                 <div class="code-view__header">
@@ -156,7 +185,18 @@
                     <span class="visually-hidden">Copy preview.css</span>
                   </button>
                 </div>
-                <pre class="code-view__block"><code>{codeCss}</code></pre>
+                <textarea
+                  class="code-view__editor"
+                  data-target="css"
+                  value={codeCss}
+                  oninput={handleCodeInput}
+                  spellcheck="false"
+                  wrap="off"
+                  autocapitalize="off"
+                  autocomplete="off"
+                  autocorrect="off"
+                  aria-label="Edit preview.css"
+                  rows="18"></textarea>
               </div>
             </div>
           </template>
