@@ -64,7 +64,8 @@ Credentials are sent only to your local API server and are never stored.
 - Port clashes on 3000 or 3001? Stop the conflicting service or update the scripts in `package.json` to use open ports.
 
 ## Roadmap
-- Chat UI to look more like Chatting.
+- [x] Chat UI to look more like Chatting.
 - Download LWC Option.
 - [x] Deploy component to Salesforce Org.
 - Use Structured Outputs
+- Add more LLM providers(mainly gemini and cluade)
