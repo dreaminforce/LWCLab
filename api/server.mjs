@@ -167,7 +167,7 @@ function sanitizeBundleName(name) {
   if (!trimmed) {
     return '';
   }
-  if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(trimmed)) {
+  if (!/^[a-z][A-Za-z0-9_]*$/.test(trimmed)) {
     return '';
   }
   return trimmed;
@@ -465,7 +465,7 @@ app.post('/api/deploy', async (req, res) => {
 
   const normalizedBundleName = sanitizeBundleName(bundleName);
   if (!normalizedBundleName) {
-    return res.status(400).json({ error: 'Enter a valid Lightning web component name (letters, numbers, underscores; must start with a letter).' });
+    return res.status(400).json({ error: 'Enter a valid Lightning web component name (letters, numbers, underscores; must start with a lowercase letter).' });
   }
 
   const normalizedTargets = normalizeTargets(targets);

@@ -3,14 +3,14 @@ import { LightningElement, track } from 'lwc';
 const CODE_STORAGE_KEY = 'lastCode';
 const CHAT_STORAGE_KEY = 'chatMessages';
 
-const DEFAULT_COMPONENT_NAME = 'PreviewComponent';
+const DEFAULT_COMPONENT_NAME = 'previewComponent';
 const DEFAULT_DEPLOY_TARGETS = ['lightning__AppPage', 'lightning__HomePage', 'lightning__RecordPage'];
 const DEPLOY_TARGET_OPTIONS = [
   { label: 'App Page', value: 'lightning__AppPage', description: 'Expose on App Builder app pages' },
   { label: 'Home Page', value: 'lightning__HomePage', description: 'Expose on Lightning Home pages' },
   { label: 'Record Page', value: 'lightning__RecordPage', description: 'Expose on Lightning Record pages' },
 ];
-const BUNDLE_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_]*$/;
+const BUNDLE_NAME_PATTERN = /^[a-z][A-Za-z0-9_]*$/;
 
 export default class Shell extends LightningElement {
   prompt = '';
@@ -469,7 +469,7 @@ export default class Shell extends LightningElement {
     }
 
     if (!BUNDLE_NAME_PATTERN.test(bundleName)) {
-      this.deployError = 'Component name must start with a letter and can contain only letters, numbers, or underscores.';
+      this.deployError = 'Component name must start with a lowercase letter and can contain only letters, numbers, or underscores.';
       return;
     }
 
