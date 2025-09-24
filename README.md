@@ -2,7 +2,10 @@
 
 LWable lets you describe a Lightning Web Component in natural language and preview usable source code in seconds. The project couples a Lightning Web Runtime (LWR) single-page app with a lightweight Node API that calls to OpenAI.
 
-[LWable.webm](https://github.com/user-attachments/assets/27a9e5f8-68cb-41d5-93cf-80adb946fe3d)
+
+
+https://github.com/user-attachments/assets/d0b926ce-a536-444d-9088-e398790de939
+
 
 
 
