@@ -70,3 +70,4 @@ Credentials are sent only to your local API server and are never stored.
 - [x] Deploy component to Salesforce Org.
 - Use Structured Outputs
 - [x] Add more LLM providers (Gemini support via toggle)
+- [ ] Upload your LWC to update
