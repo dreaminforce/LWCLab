@@ -3,7 +3,7 @@
 LWCLab lets you describe a Lightning Web Component in natural language and preview usable source code in seconds. The project couples a Lightning Web Runtime (LWR) single-page app with a lightweight Node API that can call either OpenAI or Google Gemini based on the model toggle in the UI.
 
 
-[LWable.webm](https://github.com/user-attachments/assets/7b59522d-a3e2-4e45-a3bd-223e5dcfbf8a)
+[LWCLab.webm](https://github.com/user-attachments/assets/7b59522d-a3e2-4e45-a3bd-223e5dcfbf8a)
 
 
 ## What Happens After You Clone
