@@ -16,6 +16,14 @@ app.use(express.json({ limit: '2mb' }));
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
+const DEFAULT_MODELS = {
+  openai: 'gpt-4.1-mini',
+  gemini: 'gemini-2.5-flash',
+};
+const GENERATION_TEMPERATURE = 0.2;
+
 const GEN_DIR = path.resolve(process.cwd(), 'src/modules/gen/preview');
 const SF_LOGIN_URL = process.env.SF_LOGIN_URL || 'https://login.salesforce.com';
 const SF_API_VERSION = process.env.SF_API_VERSION || '60.0';
@@ -134,6 +142,7 @@ function normalizeConversation(history) {
     return [];
   }
 
+
   return history
     .map((entry) => {
       const role = entry?.role === 'assistant' ? 'assistant' : 'user';
@@ -146,6 +155,56 @@ function normalizeConversation(history) {
     .filter(Boolean);
 }
 
+function normalizeModelSelection(input) {
+  const fallback = { provider: 'openai', model: DEFAULT_MODELS.openai };
+  if (!input) {
+    return fallback;
+  }
+
+  if (typeof input === 'string') {
+    const [rawProvider, ...rest] = input.split(':');
+    const providerKey = rawProvider === 'gemini' ? 'gemini' : rawProvider === 'openai' ? 'openai' : null;
+    if (providerKey) {
+      const joined = rest.join(':').trim();
+      const selected = joined || DEFAULT_MODELS[providerKey];
+      return { provider: providerKey, model: selected.slice(0, 200) };
+    }
+    const fallbackModel = rawProvider ? rawProvider.trim() : '';
+    if (fallbackModel) {
+      return { provider: 'openai', model: fallbackModel.slice(0, 200) };
+    }
+    return fallback;
+  }
+
+  const providerValue = input?.provider === 'gemini' ? 'gemini' : 'openai';
+  const nameValue = typeof input?.name === 'string' && input.name.trim()
+    ? input.name.trim()
+    : DEFAULT_MODELS[providerValue];
+  return { provider: providerValue, model: nameValue.slice(0, 200) };
+}
+
+function toGeminiModelPath(name) {
+  const trimmed = (name || '').trim();
+  if (!trimmed) {
+    return `models/${DEFAULT_MODELS.gemini}`;
+  }
+  return trimmed.startsWith('models/') ? trimmed : `models/${trimmed}`;
+}
+
+function buildGeminiContents(historyMessages, userText) {
+  const contents = [];
+  const safeHistory = Array.isArray(historyMessages) ? historyMessages : [];
+  for (const entry of safeHistory) {
+    const role = entry?.role === 'assistant' ? 'model' : 'user';
+    const textValue = (entry?.content ?? '').toString().trim();
+    if (!textValue) {
+      continue;
+    }
+    contents.push({ role, parts: [{ text: textValue }] });
+  }
+  contents.push({ role: 'user', parts: [{ text: (userText || '').toString() }] });
+  return contents;
+}
 function ensureHandlerStubs(js, handlerNames) {
   let code = String(js ?? '');
   const classHeaderRe = /export\s+default\s+class\s+Preview\s+extends\s+LightningElement\s*{/;
@@ -325,10 +384,88 @@ If 'base' files are provided, EDIT them to satisfy the instruction with **minima
 Return the **full** files (html/js/css), not a diff.
 `;
 
+async function callOpenAi({ messages, model }) {
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error('OPENAI_API_KEY is not configured on the server.');
+  }
+
+  const completion = await openai.chat.completions.create({
+    model,
+    response_format: { type: 'json_object' },
+    messages,
+    temperature: GENERATION_TEMPERATURE,
+  });
+
+  const content = completion.choices[0]?.message?.content;
+  if (!content) {
+    throw new Error('OpenAI response did not include any content.');
+  }
+
+  return content;
+}
+
+async function callGemini({ historyMessages, userText, model }) {
+  if (!GEMINI_API_KEY) {
+    throw new Error('GEMINI_API_KEY is not configured on the server.');
+  }
+
+  const modelPath = toGeminiModelPath(model);
+  const url = `${GEMINI_API_BASE_URL}/${modelPath}:generateContent?key=${GEMINI_API_KEY}`;
+  const payload = {
+    contents: buildGeminiContents(historyMessages, userText),
+    system_instruction: {
+      role: 'system',
+      parts: [{ text: SYSTEM }],
+    },
+    generationConfig: {
+      temperature: GENERATION_TEMPERATURE,
+      responseMimeType: 'application/json',
+    },
+  };
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  const raw = await response.text();
+  let data = null;
+  if (raw) {
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      data = null;
+    }
+  }
+
+  if (!response.ok) {
+    const detail = data?.error?.message || data?.error?.status || raw || response.statusText;
+    throw new Error(`Gemini request failed: ${detail}`);
+  }
+
+  const candidates = Array.isArray(data?.candidates) ? data.candidates : [];
+  for (const candidate of candidates) {
+    const parts = candidate?.content?.parts;
+    if (!Array.isArray(parts)) {
+      continue;
+    }
+    const textParts = parts
+      .map((part) => (typeof part?.text === 'string' ? part.text : ''))
+      .filter(Boolean);
+    const combined = textParts.join('').trim();
+    if (combined) {
+      return combined;
+    }
+  }
+
+  throw new Error('Gemini response did not include any content.');
+}
+
 // ---- routes ----
 app.post('/api/generate', async (req, res) => {
   try {
-    const { prompt, base, conversation } = req.body || {};
+    const { prompt, base, conversation, model } = req.body || {};
     if (!prompt || !prompt.trim()) {
       return res.status(400).json({ error: 'Missing prompt' });
     }
@@ -359,20 +496,21 @@ ${prompt}
 Return ONLY JSON with keys "html","js","css" (no backticks).`;
 
     const historyMessages = normalizeConversation(conversation);
-    const openAiMessages = [
-      { role: 'system', content: SYSTEM },
-      ...historyMessages,
-      { role: 'user', content: userText },
-    ];
+    const { provider, model: modelName } = normalizeModelSelection(model);
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      response_format: { type: 'json_object' },
-      messages: openAiMessages,
-      temperature: 0.2,
-    });
+    let rawContent;
+    if (provider === 'gemini') {
+      rawContent = await callGemini({ historyMessages, userText, model: modelName });
+    } else {
+      const openAiMessages = [
+        { role: 'system', content: SYSTEM },
+        ...historyMessages,
+        { role: 'user', content: userText },
+      ];
+      rawContent = await callOpenAi({ messages: openAiMessages, model: modelName || DEFAULT_MODELS.openai });
+    }
 
-    const content = completion.choices[0]?.message?.content || '{}';
+    const content = rawContent || '{}';
     const parsed = JSON.parse(content);
 
     // sanitize + validate

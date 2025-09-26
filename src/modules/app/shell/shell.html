@@ -3,6 +3,18 @@
     <section class="pane pane--chat">
       <header class="pane__header">
         <h1 class="title">LWC Generator</h1>
+        <div class="model-toggle" role="group" aria-label="AI provider">
+          <template for:each={modelProviderOptions} for:item="option">
+            <button
+              key={option.value}
+              type="button"
+              class={option.className}
+              data-provider={option.value}
+              onclick={handleModelToggle}>
+              <span class="model-toggle__label">{option.label}</span>
+            </button>
+          </template>
+        </div>
       </header>
       <div class="chat__history" role="log" aria-live="polite">
         <template if:true={hasMessages}>

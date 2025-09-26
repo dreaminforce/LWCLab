@@ -2,6 +2,14 @@ import { LightningElement, track } from 'lwc';
 
 const CODE_STORAGE_KEY = 'lastCode';
 const CHAT_STORAGE_KEY = 'chatMessages';
+const MODEL_STORAGE_KEY = 'lwable:model-selection';
+
+const MODEL_PROVIDERS = ['openai', 'gemini'];
+
+const MODEL_PRESETS = {
+  openai: { label: 'OpenAI', model: 'gpt-4.1-mini' },
+  gemini: { label: 'Google Gemini', model: 'gemini-2.5-flash' },
+};
 
 const DEFAULT_COMPONENT_NAME = 'previewComponent';
 const DEFAULT_DEPLOY_TARGETS = ['lightning__AppPage', 'lightning__HomePage', 'lightning__RecordPage'];
@@ -26,6 +34,7 @@ export default class Shell extends LightningElement {
   deployTargets = [...DEFAULT_DEPLOY_TARGETS];
   refreshing = false;
   editorNeedsSync = false;
+  modelProvider = MODEL_PROVIDERS[0];
   @track code = { html: '', js: '', css: '' };
   @track messages = [];
 
@@ -45,7 +54,7 @@ export default class Shell extends LightningElement {
       ? 'view-toggle__button view-toggle__button--active'
       : 'view-toggle__button';
   }
-  get isGenerateDisabled() { return this.generating || !this.prompt.trim(); }
+  get isGenerateDisabled() { return this.generating || !this.prompt.trim() || !this.effectiveModelName; }
   get isDeployDisabled() { return this.deploying || this.generating || !this.hasCode; }
   get deploySubmitDisabled() { return this.deploying || !this.canSubmitDeployment; }
   get hasMessages() { return this.messages.length > 0; }
@@ -57,6 +66,24 @@ export default class Shell extends LightningElement {
       ...option,
       selected: this.deployTargets.includes(option.value),
     }));
+  }
+
+  get modelProviderOptions() {
+    return MODEL_PROVIDERS.map((value) => {
+      const label = MODEL_PRESETS[value]?.label || value;
+      const className = value === this.modelProvider
+        ? 'model-toggle__button model-toggle__button--active'
+        : 'model-toggle__button';
+
+      return { value, label, className };
+    });
+  }
+
+  get effectiveModelName() {
+    const fallbackProvider = MODEL_PROVIDERS[0];
+    const activeProvider = MODEL_PROVIDERS.includes(this.modelProvider) ? this.modelProvider : fallbackProvider;
+    const config = MODEL_PRESETS[activeProvider] || MODEL_PRESETS[fallbackProvider] || {};
+    return config.model || '';
   }
 
   get hasSelectedTargets() {
@@ -127,6 +154,7 @@ export default class Shell extends LightningElement {
   }
 
   connectedCallback() {
+    this.restoreModelSelection();
     const shouldShowPreview = window.location.hash === '#show';
 
     if (shouldShowPreview) {
@@ -216,6 +244,41 @@ export default class Shell extends LightningElement {
     this.messages = restored;
   }
 
+  restoreModelSelection() {
+    try {
+      const raw = window.sessionStorage.getItem(MODEL_STORAGE_KEY);
+      if (!raw) {
+        return;
+      }
+
+      let provider = raw;
+      if (raw.trim().startsWith('{')) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === 'object') {
+            provider = parsed.provider;
+          }
+        } catch {
+          provider = raw;
+        }
+      }
+
+      const normalized = MODEL_PROVIDERS.includes(provider) ? provider : MODEL_PROVIDERS[0];
+      this.modelProvider = normalized;
+    } catch {
+      // ignore storage errors
+    }
+  }
+
+  persistModelSelection() {
+    try {
+      const value = MODEL_PROVIDERS.includes(this.modelProvider) ? this.modelProvider : MODEL_PROVIDERS[0];
+      window.sessionStorage.setItem(MODEL_STORAGE_KEY, value);
+    } catch {
+      // ignore storage errors
+    }
+  }
+
   persistMessages(nextMessages) {
     try {
       window.sessionStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(nextMessages));
@@ -231,6 +294,16 @@ export default class Shell extends LightningElement {
       // ignore history errors
     }
   }
+
+  handleModelToggle = (event) => {
+    const nextProvider = event?.currentTarget?.dataset?.provider;
+    if (!MODEL_PROVIDERS.includes(nextProvider) || nextProvider === this.modelProvider) {
+      return;
+    }
+
+    this.modelProvider = nextProvider;
+    this.persistModelSelection();
+  };
 
   handleInput = (event) => {
     this.prompt = event.target.value;
@@ -540,6 +613,12 @@ export default class Shell extends LightningElement {
       return;
     }
 
+    const provider = MODEL_PROVIDERS.includes(this.modelProvider) ? this.modelProvider : MODEL_PROVIDERS[0];
+    const modelName = this.effectiveModelName;
+    if (!modelName) {
+      return;
+    }
+
     this.clearPromptInput();
     this.generating = true;
 
@@ -556,7 +635,7 @@ export default class Shell extends LightningElement {
       const response = await fetch('http://localhost:3001/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: trimmedPrompt, base, conversation }),
+        body: JSON.stringify({ prompt: trimmedPrompt, base, conversation, model: { provider, name: modelName } }),
       });
 
       if (!response.ok) {
