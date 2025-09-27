@@ -89,6 +89,13 @@
           </button>
           <button
             type="button"
+            class="preview__export"
+            onclick={exportCode}
+            disabled={isExportDisabled}>
+            {exportButtonLabel}
+          </button>
+          <button
+            type="button"
             class="preview__deploy"
             onclick={openDeployModal}
             disabled={isDeployDisabled}>
@@ -112,7 +119,7 @@
           </template>
           <template if:false={hasGenerated}>
             <div class="preview__placeholder">
-              Waiting for AI component...
+              Start Building..
             </div>
           </template>
         </template>

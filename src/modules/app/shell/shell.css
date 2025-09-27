@@ -368,6 +368,34 @@
   opacity: 0.45;
   box-shadow: none;
 }
+.preview__export {
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: #1f2937;
+  background: #ffffff;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease, box-shadow 140ms ease, opacity 140ms ease;
+}
+
+.preview__export:hover:not([disabled]) {
+  background: rgba(37, 99, 235, 0.08);
+  color: #1d4ed8;
+}
+
+.preview__export:active:not([disabled]) {
+  background: rgba(37, 99, 235, 0.12);
+}
+
+.preview__export[disabled] {
+  cursor: not-allowed;
+  opacity: 0.45;
+  box-shadow: none;
+}
 
 .preview__deploy {
   height: 40px;
@@ -821,6 +849,10 @@
   }
 
   .preview__refresh {
+    width: 100%;
+  }
+
+  .preview__export {
     width: 100%;
   }
 

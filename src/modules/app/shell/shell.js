@@ -20,6 +20,171 @@ const DEPLOY_TARGET_OPTIONS = [
 ];
 const BUNDLE_NAME_PATTERN = /^[a-z][A-Za-z0-9_]*$/;
 
+const ZIP_LOCAL_FILE_SIGNATURE = 0x04034b50;
+const ZIP_CENTRAL_DIRECTORY_SIGNATURE = 0x02014b50;
+const ZIP_END_OF_CENTRAL_DIR_SIGNATURE = 0x06054b50;
+const ZIP_VERSION = 20;
+const ZIP_COMPRESSION_STORE = 0;
+
+const CRC32_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let index = 0; index < 256; index += 1) {
+    let value = index;
+    for (let bit = 0; bit < 8; bit += 1) {
+      if ((value & 1) === 1) {
+        value = (value >>> 1) ^ 0xedb88320;
+      } else {
+        value >>>= 1;
+      }
+    }
+    table[index] = value >>> 0;
+  }
+  return table;
+})();
+
+function crc32(bytes) {
+  let crc = 0xffffffff;
+  for (let i = 0; i < bytes.length; i += 1) {
+    const byte = bytes[i];
+    crc = CRC32_TABLE[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function pushUint16(target, value) {
+  target.push(value & 0xff, (value >>> 8) & 0xff);
+}
+
+function pushUint32(target, value) {
+  target.push(
+    value & 0xff,
+    (value >>> 8) & 0xff,
+    (value >>> 16) & 0xff,
+    (value >>> 24) & 0xff
+  );
+}
+
+function toDosDateTime(date) {
+  const safeYear = Math.max(date.getFullYear(), 1980);
+  const year = safeYear - 1980;
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
+  const seconds = Math.floor(date.getSeconds() / 2);
+  const dosTime = ((hours & 0x1f) << 11) | ((minutes & 0x3f) << 5) | (seconds & 0x1f);
+  const dosDate = ((year & 0x7f) << 9) | ((month & 0x0f) << 5) | (day & 0x1f);
+  return { time: dosTime, date: dosDate };
+}
+
+function createZipArchive(files) {
+  if (!Array.isArray(files) || files.length === 0) {
+    return null;
+  }
+
+  const encoder = new TextEncoder();
+  const timestamp = new Date();
+  const { time, date } = toDosDateTime(timestamp);
+  const fileChunks = [];
+  const centralChunks = [];
+  const entries = [];
+  let localOffset = 0;
+
+  files.forEach((file) => {
+    const name = (file?.name ?? '').toString();
+    if (!name) {
+      return;
+    }
+
+    const content = (file?.content ?? '').toString();
+    const nameBytes = encoder.encode(name);
+    const dataBytes = encoder.encode(content);
+    const crc = crc32(dataBytes);
+    const size = dataBytes.length;
+
+    const localHeader = [];
+    pushUint32(localHeader, ZIP_LOCAL_FILE_SIGNATURE);
+    pushUint16(localHeader, ZIP_VERSION);
+    pushUint16(localHeader, 0);
+    pushUint16(localHeader, ZIP_COMPRESSION_STORE);
+    pushUint16(localHeader, time);
+    pushUint16(localHeader, date);
+    pushUint32(localHeader, crc);
+    pushUint32(localHeader, size);
+    pushUint32(localHeader, size);
+    pushUint16(localHeader, nameBytes.length);
+    pushUint16(localHeader, 0);
+    localHeader.push(...nameBytes);
+
+    const localHeaderBytes = Uint8Array.from(localHeader);
+    fileChunks.push(localHeaderBytes, dataBytes);
+
+    entries.push({
+      nameBytes,
+      crc,
+      size,
+      time,
+      date,
+      offset: localOffset,
+    });
+
+    localOffset += localHeaderBytes.length + dataBytes.length;
+  });
+
+  if (entries.length === 0) {
+    return null;
+  }
+
+  entries.forEach((entry) => {
+    const centralHeader = [];
+    pushUint32(centralHeader, ZIP_CENTRAL_DIRECTORY_SIGNATURE);
+    pushUint16(centralHeader, ZIP_VERSION);
+    pushUint16(centralHeader, ZIP_VERSION);
+    pushUint16(centralHeader, 0);
+    pushUint16(centralHeader, ZIP_COMPRESSION_STORE);
+    pushUint16(centralHeader, entry.time);
+    pushUint16(centralHeader, entry.date);
+    pushUint32(centralHeader, entry.crc);
+    pushUint32(centralHeader, entry.size);
+    pushUint32(centralHeader, entry.size);
+    pushUint16(centralHeader, entry.nameBytes.length);
+    pushUint16(centralHeader, 0);
+    pushUint16(centralHeader, 0);
+    pushUint16(centralHeader, 0);
+    pushUint16(centralHeader, 0);
+    pushUint32(centralHeader, 0);
+    pushUint32(centralHeader, entry.offset);
+    centralHeader.push(...entry.nameBytes);
+    centralChunks.push(Uint8Array.from(centralHeader));
+  });
+
+  const centralSize = centralChunks.reduce((total, chunk) => total + chunk.length, 0);
+  const centralOffset = localOffset;
+
+  const endRecord = [];
+  pushUint32(endRecord, ZIP_END_OF_CENTRAL_DIR_SIGNATURE);
+  pushUint16(endRecord, 0);
+  pushUint16(endRecord, 0);
+  pushUint16(endRecord, entries.length);
+  pushUint16(endRecord, entries.length);
+  pushUint32(endRecord, centralSize);
+  pushUint32(endRecord, centralOffset);
+  pushUint16(endRecord, 0);
+  const endRecordBytes = Uint8Array.from(endRecord);
+
+  const totalSize = fileChunks.reduce((total, chunk) => total + chunk.length, 0)
+    + centralSize
+    + endRecordBytes.length;
+
+  const archive = new Uint8Array(totalSize);
+  let cursor = 0;
+  [...fileChunks, ...centralChunks, endRecordBytes].forEach((chunk) => {
+    archive.set(chunk, cursor);
+    cursor += chunk.length;
+  });
+
+  return archive;
+}
 export default class Shell extends LightningElement {
   prompt = '';
   tab = 'preview';
@@ -33,6 +198,7 @@ export default class Shell extends LightningElement {
   deployBundleName = DEFAULT_COMPONENT_NAME;
   deployTargets = [...DEFAULT_DEPLOY_TARGETS];
   refreshing = false;
+  exporting = false;
   editorNeedsSync = false;
   modelProvider = MODEL_PROVIDERS[0];
   @track code = { html: '', js: '', css: '' };
@@ -43,6 +209,8 @@ export default class Shell extends LightningElement {
   get buttonLabel() { return this.generating ? 'Generating...' : 'Generate'; }
   get deployButtonLabel() { return this.deploying ? 'Deploying...' : 'Deploy to Salesforce'; }
   get refreshButtonLabel() { return this.refreshing ? 'Refreshing...' : 'Refresh Preview'; }
+  get exportButtonLabel() { return this.exporting ? 'Exporting...' : 'Export'; }
+  get isExportDisabled() { return this.exporting || this.generating || this.refreshing || !this.hasCode; }
   get isRefreshDisabled() { return this.refreshing || this.generating || !this.hasCode; }
   get previewBtnClass() {
     return this.isPreview
@@ -153,6 +321,42 @@ export default class Shell extends LightningElement {
     }
   }
 
+  buildExportFiles() {
+    return [
+      { name: 'preview.html', content: this.codeHtml },
+      { name: 'preview.js', content: this.codeJs },
+      { name: 'preview.css', content: this.codeCss },
+    ];
+  }
+
+  buildExportFilename() {
+    const fallback = DEFAULT_COMPONENT_NAME;
+    const rawName = (this.deployBundleName || fallback).trim() || fallback;
+    const baseName = BUNDLE_NAME_PATTERN.test(rawName) ? rawName : fallback;
+    const now = new Date();
+    const pad = (value) => value.toString().padStart(2, "0");
+    const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    return `${baseName}-${stamp}.zip`;
+  }
+
+  triggerDownload(blob, filename) {
+    if (!blob || typeof document === 'undefined' || typeof URL === 'undefined') {
+      return;
+    }
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+
+    window.requestAnimationFrame(() => {
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    });
+  }
   connectedCallback() {
     this.restoreModelSelection();
     const shouldShowPreview = window.location.hash === '#show';
@@ -408,6 +612,37 @@ export default class Shell extends LightningElement {
     }
   };
 
+  exportCode = () => {
+    if (this.exporting || !this.hasCode) {
+      return;
+    }
+
+    const confirmed = typeof window === 'undefined'
+      ? true
+      : window.confirm('Export the generated files as a ZIP?');
+    if (!confirmed) {
+      return;
+    }
+
+    this.exporting = true;
+
+    try {
+      const files = this.buildExportFiles();
+      const archive = createZipArchive(files);
+      if (!archive) {
+        throw new Error('No files to export.');
+      }
+
+      const blob = new Blob([archive], { type: 'application/zip' });
+      const filename = this.buildExportFilename();
+      this.triggerDownload(blob, filename);
+    } catch (error) {
+      // eslint-disable-next-line no-alert
+      alert('Export failed. Please try again.');
+    } finally {
+      this.exporting = false;
+    }
+  };
   copyCode = async (event) => {
     const button = event?.currentTarget;
     if (!button) {
