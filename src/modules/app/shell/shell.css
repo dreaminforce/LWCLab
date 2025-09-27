@@ -223,21 +223,22 @@
 .model-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px;
+  gap: 6px;
+  padding: 2px 3px;
   border-radius: 999px;
   background: rgba(148, 163, 184, 0.12);
   border: 1px solid rgba(148, 163, 184, 0.26);
+  margin-left: auto;
 }
 
 .model-toggle__button {
   min-width: 0;
   border: none;
   border-radius: 999px;
-  padding: 6px 18px;
+  padding: 4px 12px;
   background: transparent;
   color: #1f2937;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.01em;
   display: inline-flex;
@@ -856,6 +857,7 @@
   .model-toggle {
     width: 100%;
     justify-content: space-between;
+    margin-left: 0;
   }
 
   .model-toggle__button {
@@ -875,3 +877,4 @@
     padding: 8px 14px;
   }
 }
+

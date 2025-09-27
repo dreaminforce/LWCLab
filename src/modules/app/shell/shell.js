@@ -8,7 +8,7 @@ const MODEL_PROVIDERS = ['openai', 'gemini'];
 
 const MODEL_PRESETS = {
   openai: { label: 'OpenAI', model: 'gpt-4.1-mini' },
-  gemini: { label: 'Google Gemini', model: 'gemini-2.5-flash' },
+  gemini: { label: 'Gemini', model: 'gemini-2.5-flash' },
 };
 
 const DEFAULT_COMPONENT_NAME = 'previewComponent';
