@@ -369,13 +369,14 @@
   box-shadow: none;
 }
 .preview__export {
-  height: 34px;
-  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  width: 40px;
+  padding: 0;
   border: 1px solid rgba(148, 163, 184, 0.4);
-  border-radius: 10px;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
+  border-radius: 12px;
   color: #1f2937;
   background: #ffffff;
   cursor: pointer;
@@ -391,10 +392,21 @@
   background: rgba(37, 99, 235, 0.12);
 }
 
+.preview__export:focus-visible {
+  outline: 2px solid rgba(59, 130, 246, 0.55);
+  outline-offset: 2px;
+}
+
 .preview__export[disabled] {
   cursor: not-allowed;
   opacity: 0.45;
   box-shadow: none;
+}
+
+.preview__export-icon {
+  width: 18px;
+  height: 18px;
+  display: block;
 }
 
 .preview__deploy {
