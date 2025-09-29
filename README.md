@@ -29,7 +29,9 @@ LWCLab lets you describe a Lightning Web Component in natural language and previ
    OPENAI_API_KEY=sk-...
    GEMINI_API_KEY=ai-...
    ```
-   Only one key is required, but supplying both lets you flip providers without editing env vars. Keep this file out of version control; `.gitignore` already excludes it.
+   Only one key is required, but keep both the entries or you'll face issue(I will fix this soon). Keep this file out of version control; `.gitignore` already excludes it.
+3. Create Preview folders:
+  In '**modules**' folder, create a new folder with name '**gen**'. Inside this folder, create one more folder with name '**preview**'. Inside it, create three files: **preview.html**, **preview.js** and **preview.js**. These files will contain the AI gnerated code and you can keep them empty for now. 
 
 ## Run the App Locally
 - **One command for both servers**
