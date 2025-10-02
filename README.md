@@ -68,8 +68,10 @@ Credentials are sent only to your local API server and are never stored.
 
 ## Roadmap
 - [x] Chat UI to look more like Chatting.
-- Download LWC Option.
+- [x] Download LWC Option.
 - [x] Deploy component to Salesforce Org.
-- Use Structured Outputs
 - [x] Add more LLM providers (Gemini support via toggle)
+- [x] SLDS Styled LWC
+- [ ] Use Structured Outputs
 - [ ] Upload your LWC to update
+- [ ] Aura to LWC Converter
