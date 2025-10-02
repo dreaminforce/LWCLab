@@ -14,7 +14,7 @@ const DEFAULT_COMPONENT_NAME = 'previewComponent';
 const DEFAULT_DEPLOY_TARGETS = ['lightning__AppPage', 'lightning__HomePage', 'lightning__RecordPage'];
 const DEPLOY_TARGET_OPTIONS = [
   { label: 'App Page', value: 'lightning__AppPage', description: 'Expose on App Builder app pages' },
-  { label: 'Home Page', value: 'lightning__HomePage', description: 'Expose on Lightning Home pages' },
+  { label: 'Tab', value: 'lightning__Tab', description: 'Expose on Lightning Tabs' },
   { label: 'Record Page', value: 'lightning__RecordPage', description: 'Expose on Lightning Record pages' },
 ];
 const BUNDLE_NAME_PATTERN = /^[a-z][A-Za-z0-9_]*$/;
