@@ -1,15 +1,16 @@
 {
-    "lwc": {
-      "modules": [
-        { "dir": "$rootDir/src/modules" }
-      ]
-    },
-    "routes": [
-      {
-        "id": "home",
-        "path": "/",
-        "rootComponent": "app/shell"
-      }
+  "lwc": {
+    "modules": [
+      { "dir": "$rootDir/src/modules" }
     ]
-  }
-  
+  },
+  "layoutsDir": "$rootDir/src/layouts",
+  "routes": [
+    {
+      "id": "home",
+      "path": "/",
+      "rootComponent": "app/shell",
+      "layoutTemplate": "$layoutsDir/main.html"
+    }
+  ]
+}

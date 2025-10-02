@@ -113,6 +113,31 @@ function sanitizeHtml(html, info = {}) {
   return s.trim();
 }
 
+function ensureLightTemplate(html) {
+  const s = String(html ?? '');
+  if (!s.includes('<template')) return s;
+  // already has render-mode=light?
+  if (/\blwc:render-mode\s*=\s*["']light["']/.test(s)) return s;
+
+  // inject the attribute on the root <template>
+  return s.replace(
+    /<template(\s[^>]*)?>/,
+    (m, attrs = '') => `<template${attrs} lwc:render-mode="light">`
+  );
+}
+
+function ensureLightClass(js) {
+  let code = String(js ?? '');
+  // already set?
+  if (/static\s+renderMode\s*=\s*['"]light['"]/.test(code)) return code;
+
+  // inject inside "export default class Preview extends LightningElement {"
+  const re = /(export\s+default\s+class\s+Preview\s+extends\s+LightningElement\s*{)/;
+  if (!re.test(code)) return code;
+
+  return code.replace(re, `$1\n  static renderMode = 'light';\n`);
+}
+
 function ensureMergeClasses(js) {
   if (/\bmergeClasses\s*\(/.test(js)) {
     return js;
@@ -364,23 +389,28 @@ const SYSTEM = `
 You generate **valid LWC component source** as JSON.
 
 Design focus:
-- Deliver polished, production-ready UI with thoughtful layouts, balanced color, generous spacing, and tasteful micro-interactions (e.g., hover/focus effects).
-- Avoid bare-bones markup; every component should feel visually complete, accessible, and adaptable across desktop and mobile breakpoints.
+- Deliver polished, production-ready UI with thoughtful layouts, balanced spacing, and accessible markup.
 
 Rules (apply for create or edit):
-- Return a JSON object: { \"html\": string, \"js\": string, \"css\": string } ONLY (no markdown).
-- Use **plain HTML** (no lightning-base-components, no external imports).
-- The HTML must be a full <template>...</template>.
+- Return a JSON object: { "html": string, "js": string, "css": string } ONLY (no markdown).
+- Prefer **Salesforce Lightning Design System (SLDS)** utility and component classes (e.g., slds-grid, slds-form, slds-input, slds-button, slds-card) over custom CSS.
+- Avoid lightning-base-components (plain HTML + SLDS classes only).
+- The HTML must be a full <template lwc:render-mode="light">...</template>.
 - The JS must be:
     import { LightningElement, api, track } from 'lwc';
-    export default class Preview extends LightningElement { /* methods referenced in template must exist here */ }
-- **Event handlers**: use LWC syntax (e.g., onclick={handleClick}) and define those class methods.
-  Do NOT use inline handlers like onclick=\"...\".
-- Include CSS that achieves the refined visual design; only return \"\" if the instruction explicitly prohibits styling.
+    export default class Preview extends LightningElement {
+      static renderMode = 'light';
+      /* methods referenced in template must exist here */
+    }
+- Event handlers must use LWC syntax (e.g., onclick={handleClick}); define those class methods.
+- **CSS REQUIREMENT**
+- **Never return empty CSS.** If no extra styling is needed, return at least:
+  :host { display: block; }
+- Keep custom CSS minimal and only when SLDS can’t express the styling.
 - Component class and filenames are fixed: Preview / preview.html/js/css.
 - No network calls or remote images.
 
-If 'base' files are provided, EDIT them to satisfy the instruction with **minimal necessary changes**.
+If 'base' files are provided, EDIT them with **minimal necessary changes**.
 Return the **full** files (html/js/css), not a diff.
 `;
 
@@ -515,32 +545,38 @@ Return ONLY JSON with keys "html","js","css" (no backticks).`;
 
     // sanitize + validate
     const sanitizeInfo = {};
-    const html = sanitizeHtml(parsed.html, sanitizeInfo);
+    const rawHtml = sanitizeHtml(parsed.html, sanitizeInfo);
     let js = String(parsed.js ?? '');
     const css = String(parsed.css ?? '');
+
+    // enforce light DOM so SLDS can style the preview
+    const htmlLight = ensureLightTemplate(rawHtml);
+    js = ensureLightClass(js);
 
     if (sanitizeInfo.mergeClasses) {
       js = ensureMergeClasses(js);
     }
 
-    if (!html.includes('<template')) {
+    // validate against the light DOM html & updated js
+    if (!htmlLight.includes('<template')) {
       return res.status(422).json({ error: 'HTML must contain <template>...</template>' });
     }
     if (!/export\s+default\s+class\s+Preview\s+extends\s+LightningElement/.test(js)) {
       return res.status(422).json({ error: 'JS must export class Preview extends LightningElement' });
     }
 
-    // ensure handlers referenced in HTML exist in JS
-    const handlerNames = Array.from(html.matchAll(/on[a-z]+\s*=\s*{\s*([A-Za-z_]\w*)\s*}/g)).map(m => m[1]);
+    // ensure handlers referenced in HTML exist in JS (use htmlLight)
+    const handlerNames = Array.from(htmlLight.matchAll(/on[a-z]+\s*=\s*{\s*([A-Za-z_]\w*)\s*}/g)).map(m => m[1]);
     js = ensureHandlerStubs(js, handlerNames);
     if (sanitizeInfo.mergeClasses) {
       js = ensureMergeClasses(js);
     }
 
-    // write files
-    await writePreviewFiles({ html, js, css });
+    // write files (persist the transformed code)
+    await writePreviewFiles({ html: htmlLight, js, css });
 
-    return res.json({ ok: true, module: 'gen/preview', code: { html, js, css } });
+    // IMPORTANT: return the transformed code so the Code tab matches what was saved
+    return res.json({ ok: true, module: 'gen/preview', code: { html: htmlLight, js, css } });
   } catch (err) {
     console.error(err);
     const msg = err?.message || 'Generation failed';
@@ -581,14 +617,18 @@ app.post('/api/preview', async (req, res) => {
   if (!nextHtml.trim()) {
     return res.status(400).json({ error: 'HTML content is required to update the preview.' });
   }
-
   if (!nextHtml.includes('<template')) {
     return res.status(422).json({ error: 'HTML must contain <template>...</template>' });
   }
 
   try {
-    await writePreviewFiles({ html: nextHtml, js: nextJs, css: nextCss });
-    res.json({ ok: true, code: { html: nextHtml, js: nextJs, css: nextCss } });
+    const safeHtml = ensureLightTemplate(nextHtml);
+    const safeJs = ensureLightClass(nextJs);
+
+    await writePreviewFiles({ html: safeHtml, js: safeJs, css: nextCss });
+
+    // IMPORTANT: return the transformed code
+    res.json({ ok: true, code: { html: safeHtml, js: safeJs, css: nextCss } });
   } catch (error) {
     console.error('Failed to write generated preview', error);
     res.status(500).json({ error: 'Could not save generated component to disk.' });

@@ -1,5 +1,4 @@
 import { LightningElement, track } from 'lwc';
-
 const CODE_STORAGE_KEY = 'lastCode';
 const CHAT_STORAGE_KEY = 'chatMessages';
 const MODEL_STORAGE_KEY = 'lwable:model-selection';
@@ -186,6 +185,7 @@ function createZipArchive(files) {
   return archive;
 }
 export default class Shell extends LightningElement {
+  static renderMode = 'light';
   prompt = '';
   tab = 'preview';
   generating = false;
@@ -203,7 +203,18 @@ export default class Shell extends LightningElement {
   modelProvider = MODEL_PROVIDERS[0];
   @track code = { html: '', js: '', css: '' };
   @track messages = [];
-
+  get _root() {
+    // In shadow DOM, query inside the shadow root; in light DOM, query from the host element
+    return this.shadowRoot ?? this;
+  }
+  _qs(sel) {
+    const root = this.shadowRoot ?? this;
+    return root.querySelector(sel);
+  }
+  _qsa(sel) {
+    const root = this.shadowRoot ?? this;
+    return root.querySelectorAll(sel);
+  }
   get isPreview() { return this.tab === 'preview'; }
   get isCode() { return this.tab === 'code'; }
   get buttonLabel() { return this.generating ? 'Generating...' : 'Generate'; }
@@ -388,7 +399,7 @@ export default class Shell extends LightningElement {
       return;
     }
 
-    const editors = this.template.querySelectorAll('.code-view__editor');
+    const editors = this._qsa('.code-view__editor');
     if (!editors || editors.length === 0) {
       return;
     }
@@ -709,7 +720,7 @@ export default class Shell extends LightningElement {
 
     if (typeof window !== 'undefined') {
       window.requestAnimationFrame(() => {
-        const input = this.template.querySelector('[data-field="bundle"]');
+        const input = this._qs('[data-field="bundle"]');
         if (input) {
           input.focus();
         }
@@ -825,7 +836,7 @@ export default class Shell extends LightningElement {
 
   clearPromptInput() {
     this.prompt = '';
-    const textarea = this.template.querySelector('[data-element-id="prompt-input"]');
+    const textarea = this._qs('[data-element-id="prompt-input"]');
     if (textarea) {
       textarea.value = '';
     }
