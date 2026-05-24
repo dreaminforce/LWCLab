@@ -42,7 +42,7 @@ LWCLab lets you describe a Lightning Web Component in natural language and previ
   ```
   This runs the LWR dev server on http://localhost:3000 and the API server on http://localhost:3001.
 
-Once both processes are up, open http://localhost:3000. Use the toggle beside **LWC Generator** to choose OpenAI or Gemini, edit the model field if you want to use a different model, enter a prompt in the chat panel, click **Generate**, and the preview pane will refresh with the latest component. The last conversation, model selection, and code snapshot are cached in `sessionStorage` so a browser refresh keeps your progress.
+Once both processes are up, open http://localhost:3000. Use the toggle beside **LWC Generator** to choose OpenAI or Gemini, enable **Custom CSS** if you do not want SLDS-first styling, enter a prompt in the chat panel, click **Generate**, and the preview pane will refresh with the latest component. The last conversation, provider/style selection, and code snapshot are cached in `sessionStorage` so a browser refresh keeps your progress.
 
 ## Deploy to Salesforce
 1. Generate a component so the preview pane shows the latest HTML/JS/CSS.

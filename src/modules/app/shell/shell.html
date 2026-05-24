@@ -15,21 +15,6 @@
             </button>
           </template>
         </div>
-        <div class="model-config">
-          <label class="model-config__label" for="model-name">{activeModelLabel}</label>
-          <input
-            id="model-name"
-            class="model-config__input"
-            type="text"
-            data-provider={modelProvider}
-            value={effectiveModelName}
-            oninput={handleModelNameInput}
-            placeholder={modelInputPlaceholder}
-            disabled={generating}
-            spellcheck="false"
-            autocomplete="off"
-          />
-        </div>
       </header>
       <div class="chat__history" role="log" aria-live="polite">
         <template if:true={hasMessages}>
@@ -70,22 +55,28 @@
         </template>
       </div>
       <div class="chat__composer">
-        <label class="chat__label" for="prompt">Describe the component</label>
-        <textarea
-          id="prompt"
-          class="chat__input"
-          data-element-id="prompt-input"
-          value={prompt}
-          oninput={handleInput}
-          placeholder="Describe the LWC you want (plain HTML only; no lightning-base-components)...">
-        </textarea>
-        <div class="chat__actions">
+        <label class="visually-hidden" for="prompt">Describe the component</label>
+        <div class="chat__composer-bar">
+          <textarea
+            id="prompt"
+            class="chat__input"
+            data-element-id="prompt-input"
+            value={prompt}
+            oninput={handleInput}
+            placeholder="Message LWCLab...">
+          </textarea>
           <button
             type="button"
             class="chat__send"
             onclick={generate}
+            title={buttonLabel}
+            aria-label={buttonLabel}
             disabled={isGenerateDisabled}>
-            {buttonLabel}
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 19V5"></path>
+              <path d="M6.5 10.5 12 5l5.5 5.5"></path>
+            </svg>
+            <span class="visually-hidden">{buttonLabel}</span>
           </button>
         </div>
       </div>
@@ -106,8 +97,14 @@
             type="button"
             class="preview__refresh"
             onclick={refreshPreview}
-            disabled={isRefreshDisabled}>
-            {refreshButtonLabel}
+            disabled={isRefreshDisabled}
+            title={refreshButtonLabel}
+            aria-label={refreshButtonLabel}>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M20 12a8 8 0 1 1-2.34-5.66"></path>
+              <path d="M20 4v5h-5"></path>
+            </svg>
+            <span class="visually-hidden">{refreshButtonLabel}</span>
           </button>
           <button
             type="button"
@@ -116,7 +113,10 @@
             disabled={isExportDisabled}
             title={exportButtonLabel}
             aria-label={exportButtonLabel}>
-            <svg fill="#000000" width="50px" height="50px" viewBox="0 0 256 256" id="Flat" style="width: 25px;height: 30px;" xmlns="http://www.w3.org/2000/svg"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <path d="M77.51367,66.47363a12.00063,12.00063,0,0,1,.00195-16.9707l42-41.98926a11.99917,11.99917,0,0,1,16.96875,0l42,41.98926a12.0001,12.0001,0,0,1-16.96875,16.97266L140,44.96558V128a12,12,0,0,1-24,0V44.96558l-21.51563,21.51A12.00063,12.00063,0,0,1,77.51367,66.47363ZM200,88H176a12,12,0,0,0,0,24h20v92H60V112H80a12,12,0,0,0,0-24H56a20.0226,20.0226,0,0,0-20,20V208a20.0226,20.0226,0,0,0,20,20H200a20.0226,20.0226,0,0,0,20-20V108A20.0226,20.0226,0,0,0,200,88Z"></path> </g></svg>
+            <svg viewBox="0 0 24 24" style="width:18px;height:18px;display:block;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path d="M12 3v11M8 10l4 4 4-4"/>
+              <path d="M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2"/>
+            </svg>
             <span class="visually-hidden">{exportButtonLabel}</span>
           </button>
           <button
@@ -126,6 +126,36 @@
             disabled={isDeployDisabled}>
             {deployButtonLabel}
           </button>
+          <div class="settings-menu">
+            <button
+              type="button"
+              class="settings-menu__button"
+              onclick={toggleSettings}
+              aria-haspopup="true"
+              aria-expanded={showSettings}
+              title="Settings"
+              aria-label="Settings">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"></path>
+                <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.36a1.7 1.7 0 0 0-1 .28 1.7 1.7 0 0 0-.82 1.46V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-.82-1.46 1.7 1.7 0 0 0-1-.28 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.64 15a1.7 1.7 0 0 0-.28-1 1.7 1.7 0 0 0-1.46-.82H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.46-.82 1.7 1.7 0 0 0 .28-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.64a1.7 1.7 0 0 0 1-.28 1.7 1.7 0 0 0 .82-1.46V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 .82 1.46 1.7 1.7 0 0 0 1 .28 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.36 9c0 .35.1.69.28 1 .31.52.86.82 1.46.82H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.46.82c-.18.31-.28.65-.28 1Z"></path>
+              </svg>
+            </button>
+            <template if:true={showSettings}>
+              <div class="settings-menu__panel" role="menu" aria-label="Settings">
+                <label class="style-mode">
+                  <input
+                    class="style-mode__input"
+                    type="checkbox"
+                    checked={customCss}
+                    onchange={handleStyleModeToggle}
+                    disabled={generating}
+                  />
+                  <span class="style-mode__control" aria-hidden="true"></span>
+                  <span class="style-mode__label">Custom CSS</span>
+                </label>
+              </div>
+            </template>
+          </div>
         </div>
       </div>
 
@@ -136,7 +166,7 @@
           </template>
           <template if:false={hasGenerated}>
             <div class="preview__placeholder">
-              Start Building..
+              ✦ Describe a component in the chat to see it rendered here
             </div>
           </template>
         </template>
@@ -238,7 +268,7 @@
           </template>
           <template if:false={hasCode}>
             <div class="preview__placeholder">
-              Code will appear here after you generate a component.
+              ✦ Generate a component to inspect its source code
             </div>
           </template>
         </template>

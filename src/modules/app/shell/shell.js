@@ -2,6 +2,7 @@ import { LightningElement, track } from 'lwc';
 const CODE_STORAGE_KEY = 'lastCode';
 const CHAT_STORAGE_KEY = 'chatMessages';
 const MODEL_STORAGE_KEY = 'lwable:model-selection';
+const STYLE_STORAGE_KEY = 'lwable:style-preference';
 
 const MODEL_PROVIDERS = ['openai', 'gemini'];
 
@@ -202,6 +203,8 @@ export default class Shell extends LightningElement {
   editorNeedsSync = false;
   modelProvider = MODEL_PROVIDERS[0];
   modelLoadError = '';
+  customCss = false;
+  showSettings = false;
   @track code = { html: '', js: '', css: '' };
   @track messages = [];
   @track modelNames = MODEL_PROVIDERS.reduce((result, provider) => {
@@ -267,17 +270,6 @@ export default class Shell extends LightningElement {
     const fallbackProvider = MODEL_PROVIDERS[0];
     const activeProvider = MODEL_PROVIDERS.includes(this.modelProvider) ? this.modelProvider : fallbackProvider;
     return (this.modelNames?.[activeProvider] || '').trim();
-  }
-
-  get activeModelLabel() {
-    const fallbackProvider = MODEL_PROVIDERS[0];
-    const activeProvider = MODEL_PROVIDERS.includes(this.modelProvider) ? this.modelProvider : fallbackProvider;
-    const providerLabel = MODEL_PRESETS[activeProvider]?.label || activeProvider;
-    return `${providerLabel} model`;
-  }
-
-  get modelInputPlaceholder() {
-    return this.modelLoadError || 'Enter model name';
   }
 
   get hasSelectedTargets() {
@@ -395,6 +387,7 @@ export default class Shell extends LightningElement {
   }
   connectedCallback() {
     this.restoreModelSelection();
+    this.restoreStylePreference();
     this.loadModelDefaults();
     const shouldShowPreview = window.location.hash === '#show';
 
@@ -533,6 +526,22 @@ export default class Shell extends LightningElement {
     }
   }
 
+  restoreStylePreference() {
+    try {
+      this.customCss = window.sessionStorage.getItem(STYLE_STORAGE_KEY) === 'custom';
+    } catch {
+      this.customCss = false;
+    }
+  }
+
+  persistStylePreference() {
+    try {
+      window.sessionStorage.setItem(STYLE_STORAGE_KEY, this.customCss ? 'custom' : 'slds');
+    } catch {
+      // ignore storage errors
+    }
+  }
+
   async loadModelDefaults() {
     try {
       const response = await fetch('http://localhost:3001/api/models');
@@ -584,22 +593,17 @@ export default class Shell extends LightningElement {
     this.persistModelSelection();
   };
 
-  handleModelNameInput = (event) => {
-    const provider = event?.target?.dataset?.provider;
-    if (!MODEL_PROVIDERS.includes(provider)) {
-      return;
-    }
-
-    const value = (event.target?.value || '').toString().slice(0, 200);
-    this.modelNames = {
-      ...this.modelNames,
-      [provider]: value,
-    };
-    this.persistModelSelection();
-  };
-
   handleInput = (event) => {
     this.prompt = event.target.value;
+  };
+
+  handleStyleModeToggle = (event) => {
+    this.customCss = Boolean(event?.target?.checked);
+    this.persistStylePreference();
+  };
+
+  toggleSettings = () => {
+    this.showSettings = !this.showSettings;
   };
 
   setTab = (event) => {
@@ -980,14 +984,26 @@ export default class Shell extends LightningElement {
       const response = await fetch('http://localhost:3001/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: trimmedPrompt, base, conversation, model: { provider, name: modelName } }),
+        body: JSON.stringify({
+          prompt: trimmedPrompt,
+          base,
+          conversation,
+          model: { provider, name: modelName },
+          styling: { mode: this.customCss ? 'custom' : 'slds' },
+        }),
       });
 
-      if (!response.ok) {
-        throw new Error('API error');
+      let data = null;
+      try {
+        data = await response.json();
+      } catch {
+        data = null;
       }
 
-      const data = await response.json();
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || 'API error');
+      }
+
       this.code = data.code ?? { html: '', js: '', css: '' };
       this.editorNeedsSync = true;
 
@@ -1020,7 +1036,7 @@ export default class Shell extends LightningElement {
       this.scrollChatToLatest();
 
       // eslint-disable-next-line no-alert
-      alert('Generation failed. Check API server logs.');
+      alert(error?.message || 'Generation failed. Check API server logs.');
     } finally {
       this.generating = false;
     }

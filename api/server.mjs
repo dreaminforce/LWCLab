@@ -34,6 +34,7 @@ const DEPLOY_TIMEOUT_MS = Number(process.env.SF_DEPLOY_TIMEOUT_MS || '') || 5 * 
 const DEPLOY_POLL_INTERVAL_MS = 5000;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const HTML_EVENT_HANDLER_RE = /\son(?:click|change|submit|input|blur|focus|keydown|keyup|keypress|reset|mouseover|mouseout|mouseenter|mouseleave|mousedown|mouseup)\s*=\s*{\s*([A-Za-z_]\w*)\s*}/g;
 
 async function waitForDeployCompletion(conn, deployId, timeoutMs = DEPLOY_TIMEOUT_MS, pollIntervalMs = DEPLOY_POLL_INTERVAL_MS) {
   if (!deployId) {
@@ -160,6 +161,25 @@ function ensureMergeClasses(js) {
 `;
 
   return js.replace(classHeaderRe, `$1${helperBody}`);
+}
+
+function validateGeneratedHtml(html) {
+  const value = String(html ?? '');
+  const tagMatch = value.match(/<\/?\s*(lightning-[\w-]+)/i);
+  if (tagMatch) {
+    throw new Error(`Generated HTML used unsupported ${tagMatch[1]} component. Use plain HTML elements only.`);
+  }
+
+  const expressionMatches = value.matchAll(/{([^{}]+)}/g);
+  for (const match of expressionMatches) {
+    const expression = (match[1] || '').trim();
+    if (!expression) {
+      continue;
+    }
+    if (!/^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*$/.test(expression)) {
+      throw new Error(`Generated HTML used unsupported LWC template expression "{${expression}}". Use a JS getter/property instead.`);
+    }
+  }
 }
 
 function normalizeConversation(history) {
@@ -370,13 +390,15 @@ async function writePreviewFiles({ html, js, css }) {
 }
 
 const STUB = {
-  html: `<template>
+  html: `<template lwc:render-mode="light">
   <div style="padding:12px; font:500 16px/1.4 system-ui, sans-serif;">
     Waiting for AI component...
   </div>
 </template>`,
   js: `import { LightningElement } from 'lwc';
-export default class Preview extends LightningElement {}`,
+export default class Preview extends LightningElement {
+  static renderMode = 'light';
+}`,
   css: `:host{display:block;}`
 };
 
@@ -384,8 +406,28 @@ async function resetPreviewToStub() {
   await writePreviewFiles(STUB);
 }
 
-// ---- OpenAI system prompt ----
-const SYSTEM = `
+// ---- AI system prompt ----
+function normalizeStyling(input) {
+  const mode = typeof input === 'string' ? input : input?.mode;
+  if (mode === 'custom' || input?.customCss === true || input?.useSlds === false) {
+    return 'custom';
+  }
+  return 'slds';
+}
+
+function buildSystemPrompt(styleMode = 'slds') {
+  const stylingRules = styleMode === 'custom'
+    ? `- Use semantic plain HTML with custom class names and custom CSS for the visual design.
+- Do not use Salesforce Lightning Design System (SLDS) utility or component classes unless the user explicitly asks for SLDS.
+- Do not use any lightning-* tags such as lightning-input, lightning-card, lightning-combobox, lightning-textarea, or lightning-button.
+- Use native HTML controls such as input, select, textarea, button, form, section, div, label, and fieldset.
+- The CSS file should contain the component's visual styling, including layout, spacing, states, and responsive behavior.`
+    : `- Prefer **Salesforce Lightning Design System (SLDS)** utility and component classes (e.g., slds-grid, slds-form, slds-input, slds-button, slds-card) over custom CSS.
+- Do not use any lightning-* tags such as lightning-input, lightning-card, lightning-combobox, lightning-textarea, or lightning-button.
+- Use native HTML controls with SLDS classes instead of lightning-base-components.
+- Keep custom CSS minimal and only when SLDS can’t express the styling.`;
+
+  return `
 You generate **valid LWC component source** as JSON.
 
 Design focus:
@@ -393,8 +435,7 @@ Design focus:
 
 Rules (apply for create or edit):
 - Return a JSON object: { "html": string, "js": string, "css": string } ONLY (no markdown).
-- Prefer **Salesforce Lightning Design System (SLDS)** utility and component classes (e.g., slds-grid, slds-form, slds-input, slds-button, slds-card) over custom CSS.
-- Avoid lightning-base-components (plain HTML + SLDS classes only).
+${stylingRules}
 - The HTML must be a full <template lwc:render-mode="light">...</template>.
 - The JS must be:
     import { LightningElement, api, track } from 'lwc';
@@ -403,16 +444,17 @@ Rules (apply for create or edit):
       /* methods referenced in template must exist here */
     }
 - Event handlers must use LWC syntax (e.g., onclick={handleClick}); define those class methods.
+- Template bindings must be simple identifiers or property paths only, such as {name}, {form.email}, or {isSubmitting}. Do not use ternaries, comparisons, function calls, string literals, arithmetic, or boolean expressions inside template braces. Put that logic in JS getters.
 - **CSS REQUIREMENT**
 - **Never return empty CSS.** If no extra styling is needed, return at least:
   :host { display: block; }
-- Keep custom CSS minimal and only when SLDS can’t express the styling.
 - Component class and filenames are fixed: Preview / preview.html/js/css.
 - No network calls or remote images.
 
 If 'base' files are provided, EDIT them with **minimal necessary changes**.
 Return the **full** files (html/js/css), not a diff.
 `;
+}
 
 async function callOpenAi({ messages, model }) {
   if (!process.env.OPENAI_API_KEY) {
@@ -434,7 +476,7 @@ async function callOpenAi({ messages, model }) {
   return content;
 }
 
-async function callGemini({ historyMessages, userText, model }) {
+async function callGemini({ historyMessages, userText, model, systemPrompt }) {
   if (!GEMINI_API_KEY) {
     throw new Error('GEMINI_API_KEY is not configured on the server.');
   }
@@ -445,7 +487,7 @@ async function callGemini({ historyMessages, userText, model }) {
     contents: buildGeminiContents(historyMessages, userText),
     system_instruction: {
       role: 'system',
-      parts: [{ text: SYSTEM }],
+      parts: [{ text: systemPrompt }],
     },
     generationConfig: {
       temperature: GENERATION_TEMPERATURE,
@@ -505,10 +547,15 @@ app.get('/api/models', (req, res) => {
 
 app.post('/api/generate', async (req, res) => {
   try {
-    const { prompt, base, conversation, model } = req.body || {};
+    const { prompt, base, conversation, model, styling } = req.body || {};
     if (!prompt || !prompt.trim()) {
       return res.status(400).json({ error: 'Missing prompt' });
     }
+
+    const styleMode = normalizeStyling(styling);
+    const styleInstruction = styleMode === 'custom'
+      ? `Styling mode: Custom CSS. Use semantic plain HTML, custom class names, and full custom CSS. Do not use SLDS classes or lightning-* tags. If current files use SLDS or lightning-* tags, convert them to native HTML and custom CSS.`
+      : `Styling mode: SLDS-first. Prefer SLDS utility/component classes with native HTML elements. Do not use lightning-* tags.`;
 
     const baseHtml = typeof base?.html === 'string' ? base.html : '';
     const baseJs = typeof base?.js === 'string' ? base.js : '';
@@ -518,6 +565,8 @@ app.post('/api/generate', async (req, res) => {
 
     const userText = hasBase
       ? `You are editing an existing LWC.
+${styleInstruction}
+
 Instruction:
 ${prompt}
 
@@ -531,62 +580,81 @@ ${baseCss}
 
 Return ONLY JSON with keys "html","js","css" (no backticks).`
       : `Create a new LWC based on this instruction:
+${styleInstruction}
+
 ${prompt}
 
 Return ONLY JSON with keys "html","js","css" (no backticks).`;
 
     const historyMessages = normalizeConversation(conversation);
     const { provider, model: modelName } = normalizeModelSelection(model);
+    const systemPrompt = buildSystemPrompt(styleMode);
+    let generationText = userText;
+    let lastError = null;
 
-    let rawContent;
-    if (provider === 'gemini') {
-      rawContent = await callGemini({ historyMessages, userText, model: modelName });
-    } else {
-      const openAiMessages = [
-        { role: 'system', content: SYSTEM },
-        ...historyMessages,
-        { role: 'user', content: userText },
-      ];
-      rawContent = await callOpenAi({ messages: openAiMessages, model: modelName || DEFAULT_MODELS.openai });
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        let rawContent;
+        if (provider === 'gemini') {
+          rawContent = await callGemini({ historyMessages, userText: generationText, model: modelName, systemPrompt });
+        } else {
+          const openAiMessages = [
+            { role: 'system', content: systemPrompt },
+            ...historyMessages,
+            { role: 'user', content: generationText },
+          ];
+          rawContent = await callOpenAi({ messages: openAiMessages, model: modelName || DEFAULT_MODELS.openai });
+        }
+
+        const content = rawContent || '{}';
+        const parsed = JSON.parse(content);
+
+        // sanitize + validate
+        const sanitizeInfo = {};
+        const rawHtml = sanitizeHtml(parsed.html, sanitizeInfo);
+        let js = String(parsed.js ?? '');
+        const css = String(parsed.css ?? '');
+
+        // enforce light DOM so generated CSS and SLDS classes can style the preview
+        const htmlLight = ensureLightTemplate(rawHtml);
+        validateGeneratedHtml(htmlLight);
+        js = ensureLightClass(js);
+
+        if (sanitizeInfo.mergeClasses) {
+          js = ensureMergeClasses(js);
+        }
+
+        // validate against the light DOM html & updated js
+        if (!htmlLight.includes('<template')) {
+          throw new Error('HTML must contain <template>...</template>');
+        }
+        if (!/export\s+default\s+class\s+Preview\s+extends\s+LightningElement/.test(js)) {
+          throw new Error('JS must export class Preview extends LightningElement');
+        }
+
+        // ensure handlers referenced in HTML exist in JS (use htmlLight)
+        const handlerNames = Array.from(htmlLight.matchAll(HTML_EVENT_HANDLER_RE)).map(m => m[1]);
+        js = ensureHandlerStubs(js, handlerNames);
+        if (sanitizeInfo.mergeClasses) {
+          js = ensureMergeClasses(js);
+        }
+
+        // write files (persist the transformed code)
+        await writePreviewFiles({ html: htmlLight, js, css });
+
+        // IMPORTANT: return the transformed code so the Code tab matches what was saved
+        return res.json({ ok: true, module: 'gen/preview', code: { html: htmlLight, js, css } });
+      } catch (error) {
+        lastError = error;
+        generationText = `${userText}
+
+Your previous response was invalid and could not compile as LWC: ${error?.message || 'unknown validation error'}
+
+Return corrected full files as JSON only. Use only plain HTML elements, include lwc:render-mode="light" on the root template, and move all non-trivial template logic into JS getters/properties.`;
+      }
     }
 
-    const content = rawContent || '{}';
-    const parsed = JSON.parse(content);
-
-    // sanitize + validate
-    const sanitizeInfo = {};
-    const rawHtml = sanitizeHtml(parsed.html, sanitizeInfo);
-    let js = String(parsed.js ?? '');
-    const css = String(parsed.css ?? '');
-
-    // enforce light DOM so SLDS can style the preview
-    const htmlLight = ensureLightTemplate(rawHtml);
-    js = ensureLightClass(js);
-
-    if (sanitizeInfo.mergeClasses) {
-      js = ensureMergeClasses(js);
-    }
-
-    // validate against the light DOM html & updated js
-    if (!htmlLight.includes('<template')) {
-      return res.status(422).json({ error: 'HTML must contain <template>...</template>' });
-    }
-    if (!/export\s+default\s+class\s+Preview\s+extends\s+LightningElement/.test(js)) {
-      return res.status(422).json({ error: 'JS must export class Preview extends LightningElement' });
-    }
-
-    // ensure handlers referenced in HTML exist in JS (use htmlLight)
-    const handlerNames = Array.from(htmlLight.matchAll(/on[a-z]+\s*=\s*{\s*([A-Za-z_]\w*)\s*}/g)).map(m => m[1]);
-    js = ensureHandlerStubs(js, handlerNames);
-    if (sanitizeInfo.mergeClasses) {
-      js = ensureMergeClasses(js);
-    }
-
-    // write files (persist the transformed code)
-    await writePreviewFiles({ html: htmlLight, js, css });
-
-    // IMPORTANT: return the transformed code so the Code tab matches what was saved
-    return res.json({ ok: true, module: 'gen/preview', code: { html: htmlLight, js, css } });
+    throw lastError || new Error('Generation failed validation.');
   } catch (err) {
     console.error(err);
     const msg = err?.message || 'Generation failed';

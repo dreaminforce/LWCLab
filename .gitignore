@@ -3,6 +3,7 @@ node_modules/
 
 # LWR caches and build artifacts
 __lwr_cache__/
+site/
 dist/
 build/
 coverage/
@@ -29,4 +30,3 @@ Thumbs.db
 
 # Generated preview component
 src/modules/gen/preview/
-
