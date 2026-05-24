@@ -6,8 +6,8 @@ const MODEL_STORAGE_KEY = 'lwable:model-selection';
 const MODEL_PROVIDERS = ['openai', 'gemini'];
 
 const MODEL_PRESETS = {
-  openai: { label: 'OpenAI', model: 'gpt-4.1-mini' },
-  gemini: { label: 'Gemini', model: 'gemini-2.5-flash' },
+  openai: { label: 'OpenAI' },
+  gemini: { label: 'Gemini' },
 };
 
 const DEFAULT_COMPONENT_NAME = 'previewComponent';
@@ -201,8 +201,13 @@ export default class Shell extends LightningElement {
   exporting = false;
   editorNeedsSync = false;
   modelProvider = MODEL_PROVIDERS[0];
+  modelLoadError = '';
   @track code = { html: '', js: '', css: '' };
   @track messages = [];
+  @track modelNames = MODEL_PROVIDERS.reduce((result, provider) => {
+    result[provider] = '';
+    return result;
+  }, {});
   get _root() {
     // In shadow DOM, query inside the shadow root; in light DOM, query from the host element
     return this.shadowRoot ?? this;
@@ -261,8 +266,18 @@ export default class Shell extends LightningElement {
   get effectiveModelName() {
     const fallbackProvider = MODEL_PROVIDERS[0];
     const activeProvider = MODEL_PROVIDERS.includes(this.modelProvider) ? this.modelProvider : fallbackProvider;
-    const config = MODEL_PRESETS[activeProvider] || MODEL_PRESETS[fallbackProvider] || {};
-    return config.model || '';
+    return (this.modelNames?.[activeProvider] || '').trim();
+  }
+
+  get activeModelLabel() {
+    const fallbackProvider = MODEL_PROVIDERS[0];
+    const activeProvider = MODEL_PROVIDERS.includes(this.modelProvider) ? this.modelProvider : fallbackProvider;
+    const providerLabel = MODEL_PRESETS[activeProvider]?.label || activeProvider;
+    return `${providerLabel} model`;
+  }
+
+  get modelInputPlaceholder() {
+    return this.modelLoadError || 'Enter model name';
   }
 
   get hasSelectedTargets() {
@@ -300,6 +315,16 @@ export default class Shell extends LightningElement {
       label: isUser ? 'You' : 'LWable',
       avatarLabel: isUser ? 'User avatar' : 'LWable avatar',
     };
+  }
+
+  getGenerationProgressText(isUpdateRequest) {
+    return isUpdateRequest ? 'Updating component...' : 'Creating component...';
+  }
+
+  getGenerationSuccessText(isUpdateRequest) {
+    return isUpdateRequest
+      ? 'Component updated. Use the preview and code panels to review the output.'
+      : 'Component created. Use the preview and code panels to review the output.';
   }
 
   formatConversation(messages) {
@@ -370,6 +395,7 @@ export default class Shell extends LightningElement {
   }
   connectedCallback() {
     this.restoreModelSelection();
+    this.loadModelDefaults();
     const shouldShowPreview = window.location.hash === '#show';
 
     if (shouldShowPreview) {
@@ -472,6 +498,16 @@ export default class Shell extends LightningElement {
           const parsed = JSON.parse(raw);
           if (parsed && typeof parsed === 'object') {
             provider = parsed.provider;
+            if (parsed.models && typeof parsed.models === 'object') {
+              const nextNames = { ...this.modelNames };
+              MODEL_PROVIDERS.forEach((modelProvider) => {
+                const storedName = parsed.models[modelProvider];
+                if (typeof storedName === 'string') {
+                  nextNames[modelProvider] = storedName.slice(0, 200);
+                }
+              });
+              this.modelNames = nextNames;
+            }
           }
         } catch {
           provider = raw;
@@ -487,10 +523,38 @@ export default class Shell extends LightningElement {
 
   persistModelSelection() {
     try {
-      const value = MODEL_PROVIDERS.includes(this.modelProvider) ? this.modelProvider : MODEL_PROVIDERS[0];
-      window.sessionStorage.setItem(MODEL_STORAGE_KEY, value);
+      const provider = MODEL_PROVIDERS.includes(this.modelProvider) ? this.modelProvider : MODEL_PROVIDERS[0];
+      window.sessionStorage.setItem(MODEL_STORAGE_KEY, JSON.stringify({
+        provider,
+        models: this.modelNames,
+      }));
     } catch {
       // ignore storage errors
+    }
+  }
+
+  async loadModelDefaults() {
+    try {
+      const response = await fetch('http://localhost:3001/api/models');
+      const data = await response.json();
+      if (!response.ok || !Array.isArray(data?.providers)) {
+        throw new Error('Model configuration is unavailable.');
+      }
+
+      const nextNames = { ...this.modelNames };
+      data.providers.forEach((entry) => {
+        const provider = entry?.provider;
+        const defaultModel = (entry?.defaultModel || '').toString().trim();
+        if (MODEL_PROVIDERS.includes(provider) && defaultModel && !nextNames[provider]) {
+          nextNames[provider] = defaultModel.slice(0, 200);
+        }
+      });
+
+      this.modelNames = nextNames;
+      this.modelLoadError = '';
+      this.persistModelSelection();
+    } catch {
+      this.modelLoadError = 'Start the API server to load model defaults';
     }
   }
 
@@ -517,6 +581,20 @@ export default class Shell extends LightningElement {
     }
 
     this.modelProvider = nextProvider;
+    this.persistModelSelection();
+  };
+
+  handleModelNameInput = (event) => {
+    const provider = event?.target?.dataset?.provider;
+    if (!MODEL_PROVIDERS.includes(provider)) {
+      return;
+    }
+
+    const value = (event.target?.value || '').toString().slice(0, 200);
+    this.modelNames = {
+      ...this.modelNames,
+      [provider]: value,
+    };
     this.persistModelSelection();
   };
 
@@ -842,12 +920,26 @@ export default class Shell extends LightningElement {
     }
   }
 
-  createMessage(role, text) {
+  scrollChatToLatest() {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      const history = this._qs('.chat__history');
+      if (history) {
+        history.scrollTop = history.scrollHeight;
+      }
+    });
+  }
+
+  createMessage(role, text, options = {}) {
     const base = {
       id: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
       role,
       label: role === 'user' ? 'You' : 'LWable',
       text,
+      isTyping: Boolean(options.isTyping),
     };
 
     return this.decorateMessage(base) ?? base;
@@ -868,10 +960,17 @@ export default class Shell extends LightningElement {
     this.clearPromptInput();
     this.generating = true;
 
+    const isUpdateRequest = this.hasCode;
     const userMessage = this.createMessage('user', trimmedPrompt);
+    const typingMessage = this.createMessage(
+      'assistant',
+      this.getGenerationProgressText(isUpdateRequest),
+      { isTyping: true }
+    );
     const pendingMessages = [...this.messages, userMessage];
-    this.messages = pendingMessages;
+    this.messages = [...pendingMessages, typingMessage];
     this.persistMessages(pendingMessages);
+    this.scrollChatToLatest();
 
     try {
       const base = (this.code.html || this.code.js || this.code.css) ? this.code : null;
@@ -900,11 +999,12 @@ export default class Shell extends LightningElement {
 
       const assistantMessage = this.createMessage(
         'assistant',
-        'Component updated. Use the preview and code panels to review the output.'
+        this.getGenerationSuccessText(isUpdateRequest)
       );
       const confirmedMessages = [...pendingMessages, assistantMessage];
       this.messages = confirmedMessages;
       this.persistMessages(confirmedMessages);
+      this.scrollChatToLatest();
 
       this.clearPromptInput();
       window.location.hash = '#show';
@@ -917,6 +1017,7 @@ export default class Shell extends LightningElement {
       const failedMessages = [...pendingMessages, failureMessage];
       this.messages = failedMessages;
       this.persistMessages(failedMessages);
+      this.scrollChatToLatest();
 
       // eslint-disable-next-line no-alert
       alert('Generation failed. Check API server logs.');

@@ -19,8 +19,8 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
 const DEFAULT_MODELS = {
-  openai: 'gpt-4.1-mini',
-  gemini: 'gemini-2.5-flash',
+  openai: process.env.OPENAI_MODEL || 'gpt-4.1-mini',
+  gemini: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
 };
 const GENERATION_TEMPERATURE = 0.2;
 
@@ -493,6 +493,16 @@ async function callGemini({ historyMessages, userText, model }) {
 }
 
 // ---- routes ----
+app.get('/api/models', (req, res) => {
+  res.json({
+    ok: true,
+    providers: [
+      { provider: 'openai', label: 'OpenAI', defaultModel: DEFAULT_MODELS.openai },
+      { provider: 'gemini', label: 'Gemini', defaultModel: DEFAULT_MODELS.gemini },
+    ],
+  });
+});
+
 app.post('/api/generate', async (req, res) => {
   try {
     const { prompt, base, conversation, model } = req.body || {};

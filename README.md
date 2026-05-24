@@ -15,8 +15,8 @@ LWCLab lets you describe a Lightning Web Component in natural language and previ
 - Node.js 18 or newer (the project is pinned to Node 20.16.0 via Volta).
 - npm for dependency management.
 - At least one supported AI key:
-  - `OPENAI_API_KEY` with access to the `gpt-4.1-mini` model.
-  - `GEMINI_API_KEY` with access to the `gemini-2.5-flash` model.
+  - `OPENAI_API_KEY` with access to your selected OpenAI model.
+  - `GEMINI_API_KEY` with access to your selected Gemini model.
   (You can provide both keys and switch in the UI.)
 
 ## Initial Setup
@@ -28,8 +28,10 @@ LWCLab lets you describe a Lightning Web Component in natural language and previ
    ```bash
    OPENAI_API_KEY=sk-...
    GEMINI_API_KEY=ai-...
+   OPENAI_MODEL=gpt-4.1-mini
+   GEMINI_MODEL=gemini-2.5-flash
    ```
-   Only one key is required, but keep both the entries or you'll face issue(I will fix this soon). Keep this file out of version control; `.gitignore` already excludes it.
+   Only one key is required, but keep both the entries or you'll face issue(I will fix this soon). `OPENAI_MODEL` and `GEMINI_MODEL` are optional defaults; the UI also lets you edit the active model name before generating. Keep this file out of version control; `.gitignore` already excludes it.
 3. Create Preview folders:
   In '**modules**' folder, create a new folder with name '**gen**'. Inside this folder, create one more folder with name '**preview**'. Inside it, create three files: **preview.html**, **preview.js** and **preview.js**. These files will contain the AI gnerated code and you can keep them empty for now. 
 
@@ -40,7 +42,7 @@ LWCLab lets you describe a Lightning Web Component in natural language and previ
   ```
   This runs the LWR dev server on http://localhost:3000 and the API server on http://localhost:3001.
 
-Once both processes are up, open http://localhost:3000. Use the toggle beside **LWC Generator** to choose OpenAI or Gemini, enter a prompt in the chat panel, click **Generate**, and the preview pane will refresh with the latest component. The last conversation and code snapshot are cached in `sessionStorage` so a browser refresh keeps your progress.
+Once both processes are up, open http://localhost:3000. Use the toggle beside **LWC Generator** to choose OpenAI or Gemini, edit the model field if you want to use a different model, enter a prompt in the chat panel, click **Generate**, and the preview pane will refresh with the latest component. The last conversation, model selection, and code snapshot are cached in `sessionStorage` so a browser refresh keeps your progress.
 
 ## Deploy to Salesforce
 1. Generate a component so the preview pane shows the latest HTML/JS/CSS.

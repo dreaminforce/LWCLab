@@ -15,11 +15,26 @@
             </button>
           </template>
         </div>
+        <div class="model-config">
+          <label class="model-config__label" for="model-name">{activeModelLabel}</label>
+          <input
+            id="model-name"
+            class="model-config__input"
+            type="text"
+            data-provider={modelProvider}
+            value={effectiveModelName}
+            oninput={handleModelNameInput}
+            placeholder={modelInputPlaceholder}
+            disabled={generating}
+            spellcheck="false"
+            autocomplete="off"
+          />
+        </div>
       </header>
       <div class="chat__history" role="log" aria-live="polite">
         <template if:true={hasMessages}>
           <template for:each={messages} for:item="message">
-            <article key={message.id} class="chat__message" data-role={message.role}>
+            <article key={message.id} class="chat__message" data-role={message.role} data-typing={message.isTyping}>
               <div class="chat__identity" data-role={message.role}>
                 <div class="chat__avatar" data-role={message.role} aria-hidden="true">
                   <template if:true={message.isUser}>
@@ -42,6 +57,13 @@
               </div>
               <div class="chat__bubble">
                 <p class="chat__text">{message.text}</p>
+                <template if:true={message.isTyping}>
+                  <span class="chat__typing-dots" aria-hidden="true">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </span>
+                </template>
               </div>
             </article>
           </template>
@@ -108,14 +130,6 @@
       </div>
 
       <div class="preview__body">
-        <template if:true={generating}>
-          <div class="preview__progress" role="status" aria-live="polite">
-            <div class="preview__progress-bar">
-              <div class="preview__progress-fill"></div>
-            </div>
-            <span class="preview__progress-text">Generating component...</span>
-          </div>
-        </template>
         <template if:true={isPreview}>
           <template if:true={hasGenerated}>
             <gen-preview></gen-preview>
@@ -330,4 +344,3 @@
   </template>
   </div>
 </template>
-
