@@ -23,7 +23,7 @@
     "jsforce": "^3.10.7",
     "jszip": "^3.10.1",
     "lwc": "latest",
-    "lwr": "0.18.3",
+    "lwr": "0.20.2",
     "openai": "^5.20.3"
   },
   "engines": {
